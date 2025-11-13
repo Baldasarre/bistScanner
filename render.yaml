@@ -15,8 +15,6 @@ services:
         fromDatabase:
           name: bist-db
           property: connectionString
-      - key: USERS
-        sync: false
 
 databases:
   - name: bist-db
