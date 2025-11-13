@@ -1,0 +1,187 @@
+//@version=5
+indicator("Akümülasyon Tespit Sistemi", overlay=true, max_boxes_count=100)
+
+// ============================================
+// PARAMETRELER (FİLTRELER)
+// ============================================
+maxLinkDiffInput = input.float(3.0, "Filtre: Maks Mum-Mum Farkı (%)", minval=0.1, group="Filtre Kuralları")
+maxBodyDiffInput = input.float(3.0, "Filtre: Maks Gövde Farkı (%)", minval=0.1, group="Filtre Kuralları") 
+maxTotalZoneDiffInput = input.float(5.0, "Filtre: Maks Toplam Gövde Genişliği (%)", minval=0.1, group="Filtre Kuralları")
+minCandleCountInput = input.int(3, "Filtre: Minimum Mum Sayısı", minval=2, group="Filtre Kuralları")
+rsiLengthInput = input.int(14, "Filtre: RSI Periyodu", minval=2, group="Filtre Kuralları")
+rsiMaxLimitInput = input.float(70.0, "Filtre: Maksimum RSI Limiti", minval=0, maxval=100, group="Filtre Kuralları")
+
+// ============================================
+// PARAMETRELER (PUANLAMA)
+// ============================================
+scoreDiffMinInput = input.float(2.0, "Puan: Sıkışıklık Tam Puan Limiti (<= %)", minval=0.1, group="Puanlama Kuralları")
+scoreRsiMinInput = input.float(30.0, "Puan: RSI Tam Puan Limiti (<=)", minval=0, group="Puanlama Kuralları")
+scoreRsiMaxInput = input.float(70.0, "Puan: RSI Sıfır Puan Limiti (>=)", minval=0, group="Puanlama Kuralları")
+scoreCandleMaxInput = input.int(20, "Puan: Mum Sayısı Tam Puan Limiti (>=)", minval=5, group="Puanlama Kuralları")
+// --- YENİ PUAN FİLTRESİ ---
+minScoreToDraw = input.int(30, "Puan: Minimum Gösterim Puanı", minval=0, maxval=100, group="Puanlama Kuralları")
+
+// ============================================
+// VERİ YAPISI (Değişiklik yok)
+// ============================================
+
+type Zone
+    int startTime     
+    int endTime       
+    int candleCount   
+    float highestBody 
+    float lowestBody  
+    float score       
+    float totalDiff   
+
+var array<Zone> zones = array.new<Zone>()
+
+// ============================================
+// PUANLAMA FONKSİYONU (v1.3 ile aynı)
+// ============================================
+
+f_calculateScore(zoneDiff, rsi, candleCount) =>
+    float maxScorePerBlock = 100.0 / 3.0 
+    
+    float diffPuanRange = maxTotalZoneDiffInput - scoreDiffMinInput
+    float diffScore = maxScorePerBlock * ((maxTotalZoneDiffInput - zoneDiff) / diffPuanRange)
+    diffScore := math.max(0, math.min(maxScorePerBlock, diffScore)) 
+
+    float rsiPuanRange = scoreRsiMaxInput - scoreRsiMinInput
+    float rsiScore = maxScorePerBlock * ((scoreRsiMaxInput - rsi) / rsiPuanRange)
+    rsiScore := math.max(0, math.min(maxScorePerBlock, rsiScore)) 
+
+    float candlePuanRange = scoreCandleMaxInput - minCandleCountInput
+    float candleScore = maxScorePerBlock * ((candleCount - minCandleCountInput) / candlePuanRange)
+    candleScore := math.max(0, math.min(maxScorePerBlock, candleScore))
+
+    totalScore = diffScore + rsiScore + candleScore
+    totalScore
+
+// ============================================
+// ANA HESAPLAMA
+// ============================================
+
+float rsi = ta.rsi(close, rsiLengthInput)
+
+var bool inZone = false 
+var int zoneStartIndex = na
+var float zoneMinBodyVal = na 
+var float zoneMaxBodyVal = na 
+
+// --- YARDIMCI FONKSİYON (PUAN FİLTRESİ EKLENDİ) ---
+f_finalizeZone(endBarIndex) =>
+    if na(zoneStartIndex) 
+        na
+    else
+        int candleCount = endBarIndex - zoneStartIndex + 1
+        
+        if candleCount >= minCandleCountInput
+            
+            float finalZoneDiff = ((zoneMaxBodyVal - zoneMinBodyVal) / zoneMinBodyVal) * 100
+            int endBarOffset = bar_index - endBarIndex
+            float rsiAtEnd = rsi[endBarOffset] 
+            
+            float finalScore = f_calculateScore(finalZoneDiff, rsiAtEnd, candleCount)
+
+            // --- DEĞİŞİKLİK BURADA: PUAN KONTROLÜ ---
+            // Sadece puanı geçen bölgeleri kaydet
+            if finalScore >= minScoreToDraw
+                int startTime = time[bar_index - zoneStartIndex]
+                int endTime = time[bar_index - endBarIndex]
+                
+                Zone zone = Zone.new(startTime, endTime, candleCount, zoneMaxBodyVal, zoneMinBodyVal, finalScore, finalZoneDiff)
+                array.push(zones, zone)
+
+
+// --- ANA MANTIK (Filtreler - v1.3 ile aynı) ---
+
+if bar_index > 0 
+    
+    float prevClose = close[1]
+    
+    float linkDiff = (math.abs(close - prevClose) / prevClose) * 100
+    bool isLinkValid = linkDiff <= maxLinkDiffInput
+    
+    float bodyDiff = (math.abs(open - close) / open) * 100
+    bool isBodyValid = bodyDiff <= maxBodyDiffInput
+    
+    bool isRsiValid = rsi <= rsiMaxLimitInput
+    
+    bool isTotalZoneValid = true 
+    if inZone
+        float currentMinBody = math.min(open, close)
+        float currentMaxBody = math.max(open, close)
+        float tempMinBodyVal = math.min(zoneMinBodyVal, currentMinBody)
+        float tempMaxBodyVal = math.max(zoneMaxBodyVal, currentMaxBody)
+        
+        float totalZoneDiff = ((tempMaxBodyVal - tempMinBodyVal) / tempMinBodyVal) * 100
+        isTotalZoneValid := totalZoneDiff <= maxTotalZoneDiffInput 
+    
+    
+    if inZone
+        if isLinkValid and isBodyValid and isTotalZoneValid and isRsiValid
+            zoneMinBodyVal := math.min(zoneMinBodyVal, open, close)
+            zoneMaxBodyVal := math.max(zoneMaxBodyVal, open, close)
+        else
+            f_finalizeZone(bar_index - 1)
+            
+            if isBodyValid and isRsiValid
+                inZone := true
+                zoneStartIndex := bar_index
+                zoneMinBodyVal := math.min(open, close) 
+                zoneMaxBodyVal := math.max(open, close)
+            else
+                inZone := false
+                zoneStartIndex := na
+                zoneMinBodyVal := na
+                zoneMaxBodyVal := na
+    else
+        if isBodyValid and isRsiValid
+            inZone := true
+            zoneStartIndex := bar_index
+            zoneMinBodyVal := math.min(open, close) 
+            zoneMaxBodyVal := math.max(open, close)
+
+if barstate.islast
+    if inZone 
+        f_finalizeZone(bar_index) 
+
+
+// ============================================
+// ÇİZİM (SADECE GÖVDELERİ KAPSAR)
+// ============================================
+
+var array<box> boxArray = array.new<box>()
+var array<label> labelArray = array.new<label>()
+
+if barstate.islast and array.size(zones) > 0
+    
+    for b in boxArray
+        box.delete(b)
+    for l in labelArray
+        label.delete(l)
+    array.clear(boxArray)
+    array.clear(labelArray)
+
+    // Bu döngü artık SADECE 30+ PUAN alan bölgeler için çalışacak
+    for i = 0 to array.size(zones) - 1
+        Zone zone = array.get(zones, i)
+        
+        box b = box.new(left=zone.startTime, top=zone.highestBody, right=zone.endTime, bottom=zone.lowestBody, 
+             border_color=color.purple, bgcolor=color.new(color.purple, 70), 
+             border_width=2, xloc=xloc.bar_time)
+        
+        string scoreText = str.tostring(math.round(zone.score)) + " Puan"
+        string diffText = str.tostring(zone.totalDiff, "#.##") + "%" 
+        string countText = str.tostring(zone.candleCount) + " Mum"
+        
+        string labelText = scoreText + "\n" + countText + " (" + diffText + ")"
+        
+        label l = label.new(x=zone.endTime, y=zone.lowestBody, text=labelText, 
+             style=label.style_label_up, color=color.new(color.purple, 0), 
+             textcolor=color.white, size=size.small, 
+             xloc=xloc.bar_time, yloc=yloc.price)
+        
+        array.push(boxArray, b)
+        array.push(labelArray, l)

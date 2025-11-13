@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Giriş{% endblock %}
+
+{% block content %}
+<div class="login-container">
+    <div class="login-box">
+        <form method="POST" action="{{ url_for('main.login') }}">
+            <div class="form-group">
+                <input type="text" id="username" name="username" placeholder="Kullanıcı Adı" required autofocus>
+            </div>
+
+            <div class="form-group">
+                <input type="password" id="password" name="password" placeholder="Şifre" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Giriş</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
