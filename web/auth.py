@@ -35,22 +35,37 @@ def init_auth(app):
 
 def load_users_from_config():
     """
-    Load users from config/users.json and sync with database
+    Load users from USERS environment variable or config/users.json and sync with database
+    Priority: USERS env var > config/users.json
 
     Returns:
         Number of users loaded
     """
     try:
-        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'users.json')
+        users = []
 
-        if not os.path.exists(config_path):
-            logger.warning(f"users.json not found at {config_path}")
-            return 0
+        # First, try to load from USERS environment variable
+        users_env = os.environ.get('USERS')
+        if users_env:
+            try:
+                users = json.loads(users_env)
+                logger.info("Loaded users from USERS environment variable")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse USERS environment variable: {e}")
+                users = []
 
-        with open(config_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        # If no users from env var, try config file
+        if not users:
+            config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'users.json')
 
-        users = data.get('users', [])
+            if not os.path.exists(config_path):
+                logger.warning(f"users.json not found at {config_path}")
+                return 0
+
+            with open(config_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            users = data.get('users', [])
 
         for user_data in users:
             username = user_data.get('username')

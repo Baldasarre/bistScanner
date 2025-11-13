@@ -27,7 +27,7 @@ class ScanScheduler:
         Args:
             app: Flask application instance (optional)
         """
-        self.scheduler = BackgroundScheduler()
+        self.scheduler = BackgroundScheduler(timezone='Europe/Istanbul')
         self.app = app
 
     def start(self):
