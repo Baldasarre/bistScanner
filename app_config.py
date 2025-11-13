@@ -5,8 +5,8 @@ Flask application configuration and factory
 import os
 from flask import Flask
 from database.models import db
-from app.auth import init_auth, load_users_from_config, create_sample_users_config
-from app.routes import bp
+from web.auth import init_auth, load_users_from_config, create_sample_users_config
+from web.routes import bp
 from scanner.scheduler import ScanScheduler
 import logging
 
