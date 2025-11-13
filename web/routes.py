@@ -5,7 +5,7 @@ Flask routes for the BIST scanner application
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from database.db_manager import DatabaseManager
-from app.auth import authenticate_user
+from web.auth import authenticate_user
 import logging
 
 logger = logging.getLogger(__name__)
