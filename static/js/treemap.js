@@ -35,7 +35,7 @@ function createTreemap(zones, containerId) {
     const data = {
         name: 'zones',
         children: zones.map(zone => ({
-            name: zone.ticker,
+            name: zone.ticker.replace('.IS', ''), // Remove .IS suffix
             value: zone.score, // Use score as the value for sizing
             zone: zone
         }))
@@ -44,8 +44,8 @@ function createTreemap(zones, containerId) {
     // Create treemap layout
     const treemap = d3.treemap()
         .size([width, height])
-        .padding(3)
-        .paddingOuter(4)
+        .padding(8)        // Inner padding between cells
+        .paddingOuter(10)  // Outer padding
         .round(true);
 
     // Create hierarchy
@@ -105,7 +105,7 @@ function createTreemap(zones, containerId) {
             .attr('x', cellWidth / 2)
             .attr('y', yOffset)
             .attr('text-anchor', 'middle')
-            .text(zone.ticker);
+            .text(zone.ticker.replace('.IS', ''));
 
         yOffset += 35;
 
@@ -163,11 +163,11 @@ function getZoneColor(score) {
         // Very strong - green
         return '#48bb78';
     } else if (score >= 50) {
-        // Strong - blue
-        return '#4299e1';
+        // Strong - orange
+        return '#ed8936';
     } else if (score >= 30) {
-        // Medium - yellow/gold
-        return '#ecc94b';
+        // Medium - blue
+        return '#4299e1';
     } else {
         // Weak - gray
         return '#a0aec0';

@@ -484,3 +484,142 @@ body {
 .mt-md { margin-top: var(--spacing-md); }
 .mb-sm { margin-bottom: var(--spacing-sm); }
 .mb-md { margin-bottom: var(--spacing-md); }
+
+/* =======================
+   VIEW TOGGLE
+   ======================= */
+
+.view-toggle {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.toggle-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--bg-tertiary);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.3s;
+}
+
+.toggle-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.toggle-btn.active {
+    background: var(--accent-blue);
+    color: white;
+    border-color: var(--accent-blue);
+}
+
+/* =======================
+   LIST VIEW
+   ======================= */
+
+.zones-list {
+    display: grid;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.zone-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 1.5rem;
+    align-items: center;
+    transition: all 0.3s;
+    cursor: pointer;
+}
+
+.zone-card:hover {
+    background: var(--bg-tertiary);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.zone-card-ticker {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    min-width: 100px;
+}
+
+.zone-card-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.zone-info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.zone-info-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.zone-info-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.zone-card-score {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 80px;
+}
+
+.zone-score-value {
+    font-size: 2rem;
+    font-weight: 700;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+}
+
+.zone-score-change-badge {
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.zone-score-change-badge.positive {
+    color: var(--success);
+}
+
+.zone-score-change-badge.negative {
+    color: var(--danger);
+}
+
+/* Score color badges */
+.score-high { 
+    background: rgba(72, 187, 120, 0.2);
+    color: #48bb78;
+}
+
+.score-medium { 
+    background: rgba(66, 153, 225, 0.2);
+    color: #4299e1;
+}
+
+.score-low { 
+    background: rgba(236, 201, 75, 0.2);
+    color: #ecc94b;
+}
