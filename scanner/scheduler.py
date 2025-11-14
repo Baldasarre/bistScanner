@@ -48,9 +48,9 @@ class ScanScheduler:
             func=self.run_scan,
             trigger='cron',
             hour=15,
-            minute=15,
+            minute=35,
             id='afternoon_scan',
-            name='Afternoon BIST Scan (15:15)',
+            name='Afternoon BIST Scan (15:35)',
             replace_existing=True
         )
 
