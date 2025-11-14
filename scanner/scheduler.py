@@ -47,10 +47,10 @@ class ScanScheduler:
         self.scheduler.add_job(
             func=self.run_scan,
             trigger='cron',
-            hour=14,
-            minute=45,
+            hour=15,
+            minute=15,
             id='afternoon_scan',
-            name='Afternoon BIST Scan (14:45)',
+            name='Afternoon BIST Scan (15:15)',
             replace_existing=True
         )
 
