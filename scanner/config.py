@@ -8,9 +8,9 @@ class ScannerConfig:
     """Configuration for accumulation zone detection"""
 
     # Filter parameters (from Pine Script)
-    MAX_LINK_DIFF = 3.0  # Maximum % difference between consecutive closes
-    MAX_BODY_DIFF = 4.0  # Maximum % candle body size
-    MAX_TOTAL_ZONE_DIFF = 6.0  # Maximum % total zone width
+    MAX_LINK_DIFF = 2.0  # Maximum % difference between consecutive closes
+    MAX_BODY_DIFF = 3.0  # Maximum % candle body size
+    MAX_TOTAL_ZONE_DIFF = 4.0  # Maximum % total zone width
     MIN_CANDLE_COUNT = 4  # Minimum candles required for a zone
 
     # RSI parameters
@@ -20,8 +20,8 @@ class ScannerConfig:
     # Scoring parameters
     SCORE_DIFF_MIN = 2.0  # Zone width % for full compression score
     SCORE_RSI_MIN = 30.0  # RSI for full oversold score
-    SCORE_RSI_MAX = 70.0  # RSI for zero oversold score
-    SCORE_CANDLE_MAX = 20  # Candle count for full duration score
+    SCORE_RSI_MAX = 80.0  # RSI for zero oversold score
+    SCORE_CANDLE_MAX = 10  # Candle count for full duration score
     MIN_SCORE_TO_SAVE = 30  # Minimum score threshold
 
     # Data fetching

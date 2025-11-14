@@ -436,12 +436,29 @@ body {
     background-color: var(--bg-secondary);
     padding: var(--spacing-xl);
     border-radius: 12px;
-    max-width: 500px;
-    width: 85%;
-    max-height: 80vh;
+    max-width: 1400px;
+    width: 95%;
+    max-height: 90vh;
     overflow-y: auto;
     box-shadow: var(--shadow-lg);
     font-size: 1.05rem;
+}
+
+.modal-layout {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 2rem;
+    margin-top: 1rem;
+}
+
+.modal-left {
+    overflow-y: auto;
+    max-height: 70vh;
+}
+
+.modal-right {
+    height: 700px;
+    min-height: 600px;
 }
 
 .close {

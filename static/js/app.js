@@ -402,80 +402,100 @@ async function showZoneDetail(zoneId) {
 
       const modalBody = document.getElementById("modal-body");
       modalBody.innerHTML = `
-                <h2>${zone.ticker} - Detaylar</h2>
-                <div class="zone-detail">
-                    <p><strong>Tarih Aralığı:</strong> ${formatDate(
-                      zone.start_date
-                    )} - ${formatDate(zone.end_date)}</p>
-                    <p><strong>Mum Sayısı:</strong> ${zone.candle_count}</p>
-                    <p><strong>Skor:</strong> ${zone.score}</p>
-                    <p><strong>Toplam Genişlik:</strong> %${
-                      zone.total_diff_percent
-                    }</p>
-                    <p><strong>Ortalama RSI:</strong> ${zone.avg_rsi}</p>
-                    <p><strong>Durum:</strong> ${
-                      zone.status === "active"
-                        ? "Aktif"
-                        : zone.status === "completed"
-                        ? "Tamamlandı"
-                        : "Kural Dışı"
-                    }</p>
-                </div>
+                <h2 style="margin-bottom: 1.5rem;">${zone.ticker} - Detaylar</h2>
 
-                ${
-                  history.length > 0
-                    ? `
-                    <h3 class="mt-md">Skor Geçmişi</h3>
-                    <div class="history-list">
-                        ${history
-                          .map(
-                            (h) => `
-                            <div class="history-item">
-                                ${formatDate(h.date)}: Skor ${h.score}
-                                ${
-                                  h.score_change !== 0
-                                    ? `(${
-                                        h.score_change > 0 ? "+" : ""
-                                      }${h.score_change.toFixed(1)})`
-                                    : ""
-                                }
-                            </div>
-                        `
-                          )
-                          .join("")}
-                    </div>
-                `
-                    : ""
-                }
+                <div class="modal-layout">
+                    <!-- Left side: Details -->
+                    <div class="modal-left">
+                        <div class="zone-detail">
+                            <p><strong>Tarih Aralığı:</strong> ${formatDate(zone.start_date)} - ${formatDate(zone.end_date)}</p>
+                            <p><strong>Mum Sayısı:</strong> ${zone.candle_count}</p>
+                            <p><strong>Skor:</strong> ${zone.score}</p>
+                            <p><strong>Toplam Genişlik:</strong> %${zone.total_diff_percent}</p>
+                            <p><strong>Ortalama RSI:</strong> ${zone.avg_rsi}</p>
+                            <p><strong>Durum:</strong> ${zone.status === "active" ? "Aktif" : zone.status === "completed" ? "Tamamlandı" : "Kural Dışı"}</p>
+                        </div>
 
-                <h3 class="mt-md">Yorumlar</h3>
-                <div class="comments-section">
-                    <div class="comments-list" id="comments-list-${zoneId}">
-                        ${comments.length > 0 ? comments.map(c => `
-                            <div class="comment-item">
-                                <div class="comment-header">
-                                    <strong>${c.username}</strong>
-                                    <div>
-                                        <span class="comment-date">${formatDateTime(c.created_at)}</span>
-                                        ${c.can_delete ? `<button class="btn-delete-comment" onclick="deleteComment(event, ${c.id}, ${zoneId})">×</button>` : ''}
+                        ${history.length > 0 ? `
+                            <h3 class="mt-md">Skor Geçmişi</h3>
+                            <div class="history-list">
+                                ${history.map(h => `
+                                    <div class="history-item">
+                                        ${formatDate(h.date)}: Skor ${h.score}
+                                        ${h.score_change !== 0 ? `(${h.score_change > 0 ? "+" : ""}${h.score_change.toFixed(1)})` : ""}
                                     </div>
-                                </div>
-                                <div class="comment-text">${c.comment}</div>
+                                `).join("")}
                             </div>
-                        `).join('') : '<div class="no-comments">Henüz yorum yok</div>'}
+                        ` : ""}
+
+                        <h3 class="mt-md">Yorumlar</h3>
+                        <div class="comments-section">
+                            <div class="comments-list" id="comments-list-${zoneId}">
+                                ${comments.length > 0 ? comments.map(c => `
+                                    <div class="comment-item">
+                                        <div class="comment-header">
+                                            <strong>${c.username}</strong>
+                                            <div>
+                                                <span class="comment-date">${formatDateTime(c.created_at)}</span>
+                                                ${c.can_delete ? `<button class="btn-delete-comment" onclick="deleteComment(event, ${c.id}, ${zoneId})">×</button>` : ''}
+                                            </div>
+                                        </div>
+                                        <div class="comment-text">${c.comment}</div>
+                                    </div>
+                                `).join('') : '<div class="no-comments">Henüz yorum yok</div>'}
+                            </div>
+                            <div class="comment-form">
+                                <textarea id="comment-input-${zoneId}" placeholder="Yorumunuzu yazın..." rows="3"></textarea>
+                                <button class="btn btn-primary" onclick="submitComment(${zoneId})">Gönder</button>
+                            </div>
+                        </div>
                     </div>
-                    <div class="comment-form">
-                        <textarea id="comment-input-${zoneId}" placeholder="Yorumunuzu yazın..." rows="3"></textarea>
-                        <button class="btn btn-primary" onclick="submitComment(${zoneId})">Gönder</button>
+
+                    <!-- Right side: TradingView Chart -->
+                    <div class="modal-right">
+                        <div id="tradingview_chart_${zoneId}" style="height: 100%;"></div>
                     </div>
                 </div>
             `;
 
       showModal();
+
+      // Load TradingView widget after modal is shown
+      loadTradingViewWidget(zone.ticker, zoneId);
     }
   } catch (error) {
     console.error("Error loading zone detail:", error);
   }
+}
+
+/**
+ * Load TradingView widget for a ticker
+ */
+function loadTradingViewWidget(ticker, zoneId) {
+  // Remove .IS suffix for TradingView symbol
+  const symbol = `BIST:${ticker.replace('.IS', '')}`;
+
+  new TradingView.widget({
+    container_id: `tradingview_chart_${zoneId}`,
+    autosize: true,
+    symbol: symbol,
+    interval: "D",
+    timezone: "Europe/Istanbul",
+    theme: "dark",
+    style: "1",
+    locale: "tr",
+    toolbar_bg: "#1e222d",
+    enable_publishing: false,
+    hide_side_toolbar: false,
+    allow_symbol_change: false,
+    studies: [
+      // Accumulation/Distribution indikatörü ekle
+      "AD@tv-basicstudies"
+    ],
+    show_popup_button: false,
+    popup_width: "1000",
+    popup_height: "650"
+  });
 }
 
 /**
