@@ -2,16 +2,24 @@
 Flask routes for the BIST scanner application
 """
 
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from database.db_manager import DatabaseManager
 from web.auth import authenticate_user
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
 # Create blueprint
 bp = Blueprint('main', __name__)
+
+# Global variable to track scan status
+scan_status = {
+    'is_running': False,
+    'progress': 0,
+    'message': ''
+}
 
 
 @bp.route('/')
@@ -152,3 +160,62 @@ def api_scan_status():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@bp.route('/api/trigger-scan', methods=['POST'])
+@login_required
+def api_trigger_scan():
+    """API endpoint to manually trigger a scan"""
+    global scan_status
+
+    if scan_status['is_running']:
+        return jsonify({
+            'success': False,
+            'message': 'Tarama zaten çalışıyor'
+        }), 400
+
+    # Start scan in background thread
+    def run_scan_background():
+        global scan_status
+        try:
+            scan_status['is_running'] = True
+            scan_status['progress'] = 0
+            scan_status['message'] = 'Tarama başlatılıyor...'
+
+            # Get scheduler from app and run scan
+            with current_app.app_context():
+                if hasattr(current_app, 'scheduler'):
+                    current_app.scheduler.run_scan()
+                else:
+                    from scanner.scheduler import ScanScheduler
+                    scheduler = ScanScheduler(current_app)
+                    scheduler.run_scan()
+
+            scan_status['message'] = 'Tarama tamamlandı'
+            scan_status['progress'] = 100
+        except Exception as e:
+            logger.error(f"Error during manual scan: {str(e)}")
+            scan_status['message'] = f'Tarama hatası: {str(e)}'
+        finally:
+            scan_status['is_running'] = False
+
+    thread = threading.Thread(target=run_scan_background)
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'success': True,
+        'message': 'Tarama başlatıldı'
+    })
+
+
+@bp.route('/api/scan-progress')
+@login_required
+def api_scan_progress():
+    """API endpoint to check manual scan progress"""
+    return jsonify({
+        'success': True,
+        'is_running': scan_status['is_running'],
+        'progress': scan_status['progress'],
+        'message': scan_status['message']
+    })

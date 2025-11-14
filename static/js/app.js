@@ -489,3 +489,83 @@ function showError(containerId, message) {
   const container = document.getElementById(containerId);
   container.innerHTML = `<div class="loading" style="color: var(--accent-red);">${message}</div>`;
 }
+
+/**
+ * Trigger manual scan
+ */
+async function triggerManualScan() {
+  const btn = document.getElementById("manual-scan-btn");
+  const btnText = document.getElementById("scan-btn-text");
+
+  try {
+    // Disable button
+    btn.disabled = true;
+    btnText.textContent = "Tarama başlatılıyor...";
+
+    const response = await fetch("/api/trigger-scan", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      btnText.textContent = "Tarama çalışıyor...";
+
+      // Start polling for progress
+      pollScanProgress();
+    } else {
+      alert(data.message || "Tarama başlatılamadı");
+      btn.disabled = false;
+      btnText.textContent = "Manuel Tarama";
+    }
+  } catch (error) {
+    console.error("Error triggering scan:", error);
+    alert("Tarama başlatılırken hata oluştu");
+    btn.disabled = false;
+    btnText.textContent = "Manuel Tarama";
+  }
+}
+
+/**
+ * Poll scan progress
+ */
+function pollScanProgress() {
+  const btn = document.getElementById("manual-scan-btn");
+  const btnText = document.getElementById("scan-btn-text");
+
+  const interval = setInterval(async () => {
+    try {
+      const response = await fetch("/api/scan-progress");
+      const data = await response.json();
+
+      if (data.success) {
+        if (data.is_running) {
+          btnText.textContent = data.message || "Taranıyor...";
+        } else {
+          // Scan completed
+          clearInterval(interval);
+          btn.disabled = false;
+          btnText.textContent = "Manuel Tarama";
+
+          // Reload data
+          loadActiveZones();
+          loadCompletedZones();
+          loadScanStatus();
+
+          // Show completion message
+          if (data.message) {
+            alert(data.message);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error polling scan progress:", error);
+      clearInterval(interval);
+      btn.disabled = false;
+      btnText.textContent = "Manuel Tarama";
+    }
+  }, 2000); // Poll every 2 seconds
+}

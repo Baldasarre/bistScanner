@@ -13,6 +13,9 @@
             <div class="scan-info" id="scan-info">
                 <span class="scan-date">Tarama bekleniyor...</span>
             </div>
+            <button id="manual-scan-btn" class="btn btn-primary btn-sm" onclick="triggerManualScan()">
+                <span id="scan-btn-text">Manuel Tarama</span>
+            </button>
             <div class="user-menu">
                 <span class="username">{{ current_user.username }}</span>
                 <a href="{{ url_for('main.logout') }}" class="btn btn-secondary btn-sm">Çıkış</a>

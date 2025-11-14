@@ -33,18 +33,21 @@ class ScanScheduler:
     def start(self):
         """Start the scheduler"""
         # Schedule daily scan
+        scan_hour = ScannerConfig.get_scan_hour()
+        scan_minute = ScannerConfig.get_scan_minute()
+
         self.scheduler.add_job(
             func=self.run_scan,
             trigger='cron',
-            hour=ScannerConfig.SCAN_HOUR,
-            minute=ScannerConfig.SCAN_MINUTE,
+            hour=scan_hour,
+            minute=scan_minute,
             id='daily_scan',
             name='Daily BIST Scan',
             replace_existing=True
         )
 
         self.scheduler.start()
-        logger.info(f"Scheduler started - Daily scan at {ScannerConfig.SCAN_HOUR}:{ScannerConfig.SCAN_MINUTE:02d}")
+        logger.info(f"Scheduler started - Daily scan at {scan_hour}:{scan_minute:02d}")
 
     def stop(self):
         """Stop the scheduler"""
