@@ -5,8 +5,16 @@ Database manager for CRUD operations
 from database.models import db, Zone, ScoreHistory, ScanLog
 from datetime import datetime, timedelta, date
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+def convert_numpy_types(value):
+    """Convert numpy types to Python native types"""
+    if isinstance(value, (np.integer, np.floating)):
+        return float(value)
+    return value
 
 
 class DatabaseManager:
@@ -35,11 +43,11 @@ class DatabaseManager:
                 # Update existing zone
                 existing.end_date = zone_obj.end_date.date() if isinstance(zone_obj.end_date, datetime) else zone_obj.end_date
                 existing.candle_count = zone_obj.candle_count
-                existing.score = zone_obj.score
-                existing.total_diff_percent = zone_obj.total_diff_percent
-                existing.avg_rsi = zone_obj.avg_rsi
-                existing.highest_body = zone_obj.highest_body
-                existing.lowest_body = zone_obj.lowest_body
+                existing.score = convert_numpy_types(zone_obj.score)
+                existing.total_diff_percent = convert_numpy_types(zone_obj.total_diff_percent)
+                existing.avg_rsi = convert_numpy_types(zone_obj.avg_rsi)
+                existing.highest_body = convert_numpy_types(zone_obj.highest_body)
+                existing.lowest_body = convert_numpy_types(zone_obj.lowest_body)
                 existing.status = zone_obj.status
                 existing.last_updated = datetime.utcnow()
 
@@ -56,11 +64,11 @@ class DatabaseManager:
                     start_date=zone_obj.start_date.date() if isinstance(zone_obj.start_date, datetime) else zone_obj.start_date,
                     end_date=zone_obj.end_date.date() if isinstance(zone_obj.end_date, datetime) else zone_obj.end_date,
                     candle_count=zone_obj.candle_count,
-                    score=zone_obj.score,
-                    total_diff_percent=zone_obj.total_diff_percent,
-                    avg_rsi=zone_obj.avg_rsi,
-                    highest_body=zone_obj.highest_body,
-                    lowest_body=zone_obj.lowest_body,
+                    score=convert_numpy_types(zone_obj.score),
+                    total_diff_percent=convert_numpy_types(zone_obj.total_diff_percent),
+                    avg_rsi=convert_numpy_types(zone_obj.avg_rsi),
+                    highest_body=convert_numpy_types(zone_obj.highest_body),
+                    lowest_body=convert_numpy_types(zone_obj.lowest_body),
                     status=zone_obj.status
                 )
                 db.session.add(new_zone)
