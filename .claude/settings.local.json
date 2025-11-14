@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python migrate_db.py:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -71,8 +71,38 @@ function createTreemap(zones, containerId) {
         .attr('rx', 6)
         .attr('ry', 6)
         .on('click', function(event, d) {
+            // Check if click was on flag
+            if (event.target.classList && event.target.classList.contains('zone-flag')) {
+                return; // Flag click handled separately
+            }
             showZoneDetail(d.data.zone.id);
         });
+
+    // Add flag icon in top-right corner (only for cells large enough)
+    nodes.each(function(d) {
+        const cellWidth = d.x1 - d.x0;
+        const cellHeight = d.y1 - d.y0;
+
+        if (cellWidth >= 60 && cellHeight >= 50) {
+            const zone = d.data.zone;
+            const node = d3.select(this);
+
+            node.append('text')
+                .attr('class', `zone-flag ${zone.is_flagged ? 'flagged' : ''}`)
+                .attr('x', cellWidth - 20)
+                .attr('y', 25)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '24px')
+                .style('cursor', 'pointer')
+                .style('fill', 'white')
+                .style('opacity', zone.is_flagged ? '1' : '0.6')
+                .text('⚑')
+                .on('click', function(event) {
+                    event.stopPropagation();
+                    toggleFlag(event, zone.id);
+                });
+        }
+    });
 
     // Add text content to each cell
     nodes.each(function(d) {
@@ -97,7 +127,7 @@ function createTreemap(zones, containerId) {
         }
 
         const zone = d.data.zone;
-        let yOffset = 20;
+        let yOffset = 30;
 
         // Ticker name
         node.append('text')
@@ -105,9 +135,11 @@ function createTreemap(zones, containerId) {
             .attr('x', cellWidth / 2)
             .attr('y', yOffset)
             .attr('text-anchor', 'middle')
+            .style('font-size', '25px')
+            .style('font-weight', 'bold')
             .text(zone.ticker.replace('.IS', ''));
 
-        yOffset += 35;
+        yOffset += 40;
 
         // Score (large)
         node.append('text')
@@ -115,7 +147,7 @@ function createTreemap(zones, containerId) {
             .attr('x', cellWidth / 2)
             .attr('y', yOffset)
             .attr('text-anchor', 'middle')
-            .text(Math.round(zone.score));
+            .text(`${Math.round(zone.score)} Puan`);
 
         yOffset += 20;
 
@@ -141,14 +173,35 @@ function createTreemap(zones, containerId) {
                 .attr('text-anchor', 'middle')
                 .text(`${zone.candle_count} gün`);
 
-            yOffset += 15;
+            yOffset += 18;
 
             node.append('text')
                 .attr('class', 'zone-details')
                 .attr('x', cellWidth / 2)
                 .attr('y', yOffset)
                 .attr('text-anchor', 'middle')
-                .text(`%${zone.total_diff_percent}`);
+                .text(`% ${zone.total_diff_percent}`);
+
+            yOffset += 20;
+
+            // Last comment (if any)
+            if (zone.last_comment) {
+                // Truncate comment if too long for the cell
+                const maxLength = Math.floor(cellWidth / 5.5);
+                const commentText = zone.last_comment.length > maxLength
+                    ? zone.last_comment.substring(0, maxLength) + '...'
+                    : zone.last_comment;
+
+                node.append('text')
+                    .attr('class', 'zone-details')
+                    .attr('x', cellWidth / 2)
+                    .attr('y', yOffset)
+                    .attr('text-anchor', 'middle')
+                    .style('font-size', '14px')
+                    .style('font-style', 'italic')
+                    .style('font-weight', '500')
+                    .text(`💬 ${commentText}`);
+            }
         }
     });
 }

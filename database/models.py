@@ -42,8 +42,10 @@ class Zone(db.Model):
     last_updated = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relationship to score history
+    # Relationships
     score_history = db.relationship('ScoreHistory', backref='zone', lazy=True, cascade='all, delete-orphan')
+    comments = db.relationship('ZoneComment', backref='zone', lazy=True, cascade='all, delete-orphan', order_by='ZoneComment.created_at.desc()')
+    is_flagged = db.Column(db.Boolean, default=False)
 
     def to_dict(self):
         """Convert zone to dictionary"""
@@ -59,12 +61,42 @@ class Zone(db.Model):
             'total_diff_percent': self.total_diff_percent,
             'avg_rsi': self.avg_rsi,
             'status': self.status,
+            'is_flagged': self.is_flagged,
+            'comment_count': len(self.comments) if self.comments else 0,
             'last_updated': self.last_updated.isoformat() if self.last_updated else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 
     def __repr__(self):
         return f'<Zone {self.ticker} {self.start_date} score={self.score}>'
+
+
+class ZoneComment(db.Model):
+    """Comments on zones"""
+
+    __tablename__ = 'zone_comments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    zone_id = db.Column(db.Integer, db.ForeignKey('zones.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    comment = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationship to user
+    user = db.relationship('User', backref='comments')
+
+    def to_dict(self):
+        """Convert to dictionary"""
+        return {
+            'id': self.id,
+            'zone_id': self.zone_id,
+            'username': self.user.username if self.user else 'Unknown',
+            'comment': self.comment,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+    def __repr__(self):
+        return f'<ZoneComment zone={self.zone_id} user={self.user_id}>'
 
 
 class ScoreHistory(db.Model):

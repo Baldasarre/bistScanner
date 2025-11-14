@@ -249,9 +249,13 @@ function createActiveZoneCard(zone) {
 
   return `
         <div class="zone-card active" data-zone-id="${zone.id}">
+            <div class="zone-card-flag ${zone.is_flagged ? 'flagged' : ''}" onclick="toggleFlag(event, ${zone.id})">
+                ⚑
+            </div>
             <div class="zone-card-left">
                 <div class="zone-ticker-large">${ticker}</div>
                 <div class="zone-start-date">${startDate}</div>
+                ${zone.last_comment ? `<div class="zone-last-comment">💬 ${zone.last_comment}</div>` : ''}
             </div>
             <div class="zone-card-middle">
                 <div class="zone-stat-row">
@@ -373,6 +377,7 @@ function createZoneCard(zone) {
                 <div class="zone-stat">
                     <strong>Bitiş:</strong> ${endDate}
                 </div>
+                ${zone.last_comment ? `<div class="zone-last-comment-completed">💬 ${zone.last_comment}</div>` : ''}
             </div>
         </div>
     `;
@@ -389,6 +394,11 @@ async function showZoneDetail(zoneId) {
     if (data.success) {
       const zone = data.zone;
       const history = data.history;
+
+      // Load comments
+      const commentsResponse = await fetch(`/api/zone/${zoneId}/comments`);
+      const commentsData = await commentsResponse.json();
+      const comments = commentsData.success ? commentsData.comments : [];
 
       const modalBody = document.getElementById("modal-body");
       modalBody.innerHTML = `
@@ -437,6 +447,28 @@ async function showZoneDetail(zoneId) {
                 `
                     : ""
                 }
+
+                <h3 class="mt-md">Yorumlar</h3>
+                <div class="comments-section">
+                    <div class="comments-list" id="comments-list-${zoneId}">
+                        ${comments.length > 0 ? comments.map(c => `
+                            <div class="comment-item">
+                                <div class="comment-header">
+                                    <strong>${c.username}</strong>
+                                    <div>
+                                        <span class="comment-date">${formatDateTime(c.created_at)}</span>
+                                        ${c.can_delete ? `<button class="btn-delete-comment" onclick="deleteComment(event, ${c.id}, ${zoneId})">×</button>` : ''}
+                                    </div>
+                                </div>
+                                <div class="comment-text">${c.comment}</div>
+                            </div>
+                        `).join('') : '<div class="no-comments">Henüz yorum yok</div>'}
+                    </div>
+                    <div class="comment-form">
+                        <textarea id="comment-input-${zoneId}" placeholder="Yorumunuzu yazın..." rows="3"></textarea>
+                        <button class="btn btn-primary" onclick="submitComment(${zoneId})">Gönder</button>
+                    </div>
+                </div>
             `;
 
       showModal();
@@ -491,81 +523,113 @@ function showError(containerId, message) {
 }
 
 /**
- * Trigger manual scan
+ * Toggle zone flag
  */
-async function triggerManualScan() {
-  const btn = document.getElementById("manual-scan-btn");
-  const btnText = document.getElementById("scan-btn-text");
+async function toggleFlag(event, zoneId) {
+  event.stopPropagation(); // Prevent card click
 
   try {
-    // Disable button
-    btn.disabled = true;
-    btnText.textContent = "Tarama başlatılıyor...";
-
-    const response = await fetch("/api/trigger-scan", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+    const response = await fetch(`/api/zone/${zoneId}/flag`, {
+      method: 'POST'
     });
 
     const data = await response.json();
 
     if (data.success) {
-      btnText.textContent = "Tarama çalışıyor...";
-
-      // Start polling for progress
-      pollScanProgress();
+      // Reload zones to reflect flag change
+      loadActiveZones();
+      loadCompletedZones();
     } else {
-      alert(data.message || "Tarama başlatılamadı");
-      btn.disabled = false;
-      btnText.textContent = "Manuel Tarama";
+      alert('Bayrak değiştirilemedi');
     }
   } catch (error) {
-    console.error("Error triggering scan:", error);
-    alert("Tarama başlatılırken hata oluştu");
-    btn.disabled = false;
-    btnText.textContent = "Manuel Tarama";
+    console.error('Error toggling flag:', error);
+    alert('Bayrak değiştirilirken hata oluştu');
   }
 }
 
 /**
- * Poll scan progress
+ * Submit comment
  */
-function pollScanProgress() {
-  const btn = document.getElementById("manual-scan-btn");
-  const btnText = document.getElementById("scan-btn-text");
+async function submitComment(zoneId) {
+  const textarea = document.getElementById(`comment-input-${zoneId}`);
+  const comment = textarea.value.trim();
 
-  const interval = setInterval(async () => {
-    try {
-      const response = await fetch("/api/scan-progress");
-      const data = await response.json();
+  if (!comment) {
+    alert('Lütfen bir yorum yazın');
+    return;
+  }
 
-      if (data.success) {
-        if (data.is_running) {
-          btnText.textContent = data.message || "Taranıyor...";
-        } else {
-          // Scan completed
-          clearInterval(interval);
-          btn.disabled = false;
-          btnText.textContent = "Manuel Tarama";
+  try {
+    const response = await fetch(`/api/zone/${zoneId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ comment })
+    });
 
-          // Reload data
-          loadActiveZones();
-          loadCompletedZones();
-          loadScanStatus();
+    const data = await response.json();
 
-          // Show completion message
-          if (data.message) {
-            alert(data.message);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Error polling scan progress:", error);
-      clearInterval(interval);
-      btn.disabled = false;
-      btnText.textContent = "Manuel Tarama";
+    if (data.success) {
+      // Reload zone detail to show new comment
+      showZoneDetail(zoneId);
+      // Reload zones to update comment count
+      loadActiveZones();
+      loadCompletedZones();
+    } else {
+      alert(data.error || 'Yorum eklenemedi');
     }
-  }, 2000); // Poll every 2 seconds
+  } catch (error) {
+    console.error('Error submitting comment:', error);
+    alert('Yorum gönderilirken hata oluştu');
+  }
 }
+
+/**
+ * Delete a comment
+ */
+async function deleteComment(event, commentId, zoneId) {
+  event.stopPropagation();
+
+  if (!confirm('Bu yorumu silmek istediğinizden emin misiniz?')) {
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/comment/${commentId}`, {
+      method: 'DELETE'
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Reload zone detail to reflect deletion
+      showZoneDetail(zoneId);
+      // Reload zones to update comment count
+      loadActiveZones();
+      loadCompletedZones();
+    } else {
+      alert(data.error || 'Yorum silinemedi');
+    }
+  } catch (error) {
+    console.error('Error deleting comment:', error);
+    alert('Yorum silinirken hata oluştu');
+  }
+}
+
+/**
+ * Format datetime for comments
+ */
+function formatDateTime(dateString) {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  return date.toLocaleString('tr-TR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+

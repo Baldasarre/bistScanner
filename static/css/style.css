@@ -183,6 +183,12 @@ body {
     font-weight: 500;
 }
 
+.scan-schedule {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
 .user-menu {
     display: flex;
     align-items: center;
@@ -380,6 +386,7 @@ body {
     border-radius: 12px;
     font-size: 0.75rem;
     font-weight: 600;
+    margin-left: auto;
 }
 
 .zone-status.completed {
@@ -429,11 +436,12 @@ body {
     background-color: var(--bg-secondary);
     padding: var(--spacing-xl);
     border-radius: 12px;
-    max-width: 600px;
-    width: 90%;
+    max-width: 500px;
+    width: 85%;
     max-height: 80vh;
     overflow-y: auto;
     box-shadow: var(--shadow-lg);
+    font-size: 1.05rem;
 }
 
 .close {
@@ -484,6 +492,88 @@ body {
 .mt-md { margin-top: var(--spacing-md); }
 .mb-sm { margin-bottom: var(--spacing-sm); }
 .mb-md { margin-bottom: var(--spacing-md); }
+
+/* =======================
+   COMMENTS SECTION
+   ======================= */
+
+.comments-section {
+    margin-top: var(--spacing-md);
+    padding: var(--spacing-sm);
+    background: var(--bg-primary);
+    border-radius: 8px;
+}
+
+.comments-list {
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: var(--spacing-sm);
+}
+
+.comment-item {
+    background: var(--bg-secondary);
+    padding: 0.5rem;
+    border-radius: 6px;
+    margin-bottom: 0.4rem;
+    font-size: 0.95rem;
+}
+
+.comment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.3rem;
+}
+
+.comment-header strong {
+    color: var(--accent-orange);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.comment-date {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+
+.comment-text {
+    color: var(--text-primary);
+    line-height: 1.4;
+    white-space: pre-wrap;
+}
+
+.no-comments {
+    color: var(--text-secondary);
+    text-align: center;
+    padding: var(--spacing-md);
+    font-style: italic;
+}
+
+.comment-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.comment-form textarea {
+    width: 100%;
+    padding: var(--spacing-sm);
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-family: inherit;
+    resize: vertical;
+}
+
+.comment-form textarea:focus {
+    outline: none;
+    border-color: var(--accent-orange);
+}
+
+.comment-form button {
+    align-self: flex-end;
+}
 
 /* =======================
    VIEW TOGGLE
@@ -538,12 +628,62 @@ body {
     align-items: center;
     transition: all 0.3s;
     cursor: pointer;
+    position: relative;
 }
 
 .zone-card:hover {
     background: var(--bg-tertiary);
     box-shadow: var(--shadow-md);
     transform: translateY(-2px);
+}
+
+/* Flag icon */
+.zone-card-flag {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.zone-card-flag:hover {
+    color: var(--accent-orange);
+    transform: scale(1.2);
+}
+
+.zone-card-flag.flagged {
+    color: var(--accent-red);
+}
+
+/* Comment count */
+.zone-comment-count {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+/* Last comment preview */
+.zone-last-comment {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 0.4rem;
+    font-style: italic;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.zone-last-comment-completed {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+    font-style: italic;
 }
 
 .zone-card-ticker {

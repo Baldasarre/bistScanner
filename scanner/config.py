@@ -3,8 +3,6 @@ Scanner configuration parameters
 Matches the Pine Script indicator settings
 """
 
-import os
-
 
 class ScannerConfig:
     """Configuration for accumulation zone detection"""
@@ -30,31 +28,12 @@ class ScannerConfig:
     DATA_PERIOD = "30d"  # How much historical data to fetch
     DATA_INTERVAL = "1d"  # Daily candles
 
-    # Scan timing - default values (can be overridden by environment variables via get_scan_hour/minute methods)
-    _SCAN_HOUR = 18  # 18:30 (after market close)
-    _SCAN_MINUTE = 30
+    # Scan timing - default values (can be overridden by SCAN_HOUR and SCAN_MINUTE env vars in scheduler)
+    SCAN_HOUR = 18  # 18:30 (after market close)
+    SCAN_MINUTE = 30
 
     # Database retention
     COMPLETED_ZONE_RETENTION_DAYS = 21  # Keep completed zones for 3 weeks (21 days)
-
-    @classmethod
-    def get_scan_hour(cls):
-        """Get scan hour from environment or default"""
-        return int(os.environ.get('SCAN_HOUR', cls._SCAN_HOUR))
-
-    @classmethod
-    def get_scan_minute(cls):
-        """Get scan minute from environment or default"""
-        return int(os.environ.get('SCAN_MINUTE', cls._SCAN_MINUTE))
-
-    # For backward compatibility
-    @property
-    def SCAN_HOUR(self):
-        return self.get_scan_hour()
-
-    @property
-    def SCAN_MINUTE(self):
-        return self.get_scan_minute()
 
     @classmethod
     def to_dict(cls):

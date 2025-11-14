@@ -2,24 +2,17 @@
 Flask routes for the BIST scanner application
 """
 
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, current_app
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
 from flask_login import login_user, logout_user, login_required, current_user
 from database.db_manager import DatabaseManager
+from database.models import db, Zone, ZoneComment
 from web.auth import authenticate_user
 import logging
-import threading
 
 logger = logging.getLogger(__name__)
 
 # Create blueprint
 bp = Blueprint('main', __name__)
-
-# Global variable to track scan status
-scan_status = {
-    'is_running': False,
-    'progress': 0,
-    'message': ''
-}
 
 
 @bp.route('/')
@@ -66,11 +59,17 @@ def api_active_zones():
     try:
         zones = DatabaseManager.get_active_zones()
 
-        # Add score change to each zone
+        # Add score change and last comment to each zone
         zones_data = []
         for zone in zones:
             zone_dict = zone.to_dict()
             zone_dict['score_change'] = DatabaseManager.get_zone_score_change(zone.id)
+            # Add last comment preview
+            if zone.comments:
+                last_comment = zone.comments[0]  # Already ordered by created_at desc
+                zone_dict['last_comment'] = f"{last_comment.user.username}: {last_comment.comment[:50]}{'...' if len(last_comment.comment) > 50 else ''}"
+            else:
+                zone_dict['last_comment'] = None
             zones_data.append(zone_dict)
 
         return jsonify({
@@ -94,7 +93,17 @@ def api_completed_zones():
         days = request.args.get('days', 21, type=int)
         zones = DatabaseManager.get_completed_zones(days=days)
 
-        zones_data = [zone.to_dict() for zone in zones]
+        # Add last comment to each zone
+        zones_data = []
+        for zone in zones:
+            zone_dict = zone.to_dict()
+            # Add last comment preview
+            if zone.comments:
+                last_comment = zone.comments[0]  # Already ordered by created_at desc
+                zone_dict['last_comment'] = f"{last_comment.user.username}: {last_comment.comment[:50]}{'...' if len(last_comment.comment) > 50 else ''}"
+            else:
+                zone_dict['last_comment'] = None
+            zones_data.append(zone_dict)
 
         return jsonify({
             'success': True,
@@ -162,60 +171,127 @@ def api_scan_status():
         }), 500
 
 
-@bp.route('/api/trigger-scan', methods=['POST'])
+@bp.route('/api/zone/<int:zone_id>/comments', methods=['GET'])
 @login_required
-def api_trigger_scan():
-    """API endpoint to manually trigger a scan"""
-    global scan_status
+def api_get_comments(zone_id):
+    """Get comments for a zone"""
+    try:
+        zone = Zone.query.get_or_404(zone_id)
+        comments = []
+        for comment in zone.comments:
+            comment_dict = comment.to_dict()
+            comment_dict['can_delete'] = (comment.user_id == current_user.id)
+            comments.append(comment_dict)
 
-    if scan_status['is_running']:
+        return jsonify({
+            'success': True,
+            'comments': comments
+        })
+    except Exception as e:
+        logger.error(f"Error fetching comments: {str(e)}")
         return jsonify({
             'success': False,
-            'message': 'Tarama zaten çalışıyor'
-        }), 400
-
-    # Start scan in background thread
-    def run_scan_background():
-        global scan_status
-        try:
-            scan_status['is_running'] = True
-            scan_status['progress'] = 0
-            scan_status['message'] = 'Tarama başlatılıyor...'
-
-            # Get scheduler from app and run scan
-            with current_app.app_context():
-                if hasattr(current_app, 'scheduler'):
-                    current_app.scheduler.run_scan()
-                else:
-                    from scanner.scheduler import ScanScheduler
-                    scheduler = ScanScheduler(current_app)
-                    scheduler.run_scan()
-
-            scan_status['message'] = 'Tarama tamamlandı'
-            scan_status['progress'] = 100
-        except Exception as e:
-            logger.error(f"Error during manual scan: {str(e)}")
-            scan_status['message'] = f'Tarama hatası: {str(e)}'
-        finally:
-            scan_status['is_running'] = False
-
-    thread = threading.Thread(target=run_scan_background)
-    thread.daemon = True
-    thread.start()
-
-    return jsonify({
-        'success': True,
-        'message': 'Tarama başlatıldı'
-    })
+            'error': str(e)
+        }), 500
 
 
-@bp.route('/api/scan-progress')
+@bp.route('/api/zone/<int:zone_id>/comments', methods=['POST'])
 @login_required
-def api_scan_progress():
-    """API endpoint to check manual scan progress"""
+def api_add_comment(zone_id):
+    """Add a comment to a zone"""
+    try:
+        data = request.get_json()
+        comment_text = data.get('comment', '').strip()
+
+        if not comment_text:
+            return jsonify({
+                'success': False,
+                'error': 'Yorum boş olamaz'
+            }), 400
+
+        # Create comment
+        comment = ZoneComment(
+            zone_id=zone_id,
+            user_id=current_user.id,
+            comment=comment_text
+        )
+
+        db.session.add(comment)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'comment': comment.to_dict()
+        })
+    except Exception as e:
+        logger.error(f"Error adding comment: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/api/comment/<int:comment_id>', methods=['DELETE'])
+@login_required
+def api_delete_comment(comment_id):
+    """Delete a comment"""
+    try:
+        comment = ZoneComment.query.get_or_404(comment_id)
+
+        # Check if user owns the comment
+        if comment.user_id != current_user.id:
+            return jsonify({
+                'success': False,
+                'error': 'Bu yorumu silme yetkiniz yok'
+            }), 403
+
+        db.session.delete(comment)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Yorum silindi'
+        })
+    except Exception as e:
+        logger.error(f"Error deleting comment: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/api/zone/<int:zone_id>/flag', methods=['POST'])
+@login_required
+def api_toggle_flag(zone_id):
+    """Toggle flag on a zone"""
+    try:
+        zone = Zone.query.get_or_404(zone_id)
+        zone.is_flagged = not zone.is_flagged
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'is_flagged': zone.is_flagged
+        })
+    except Exception as e:
+        logger.error(f"Error toggling flag: {str(e)}")
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
+@bp.route('/api/keepalive')
+def api_keepalive():
+    """Keep the service awake - called by cron jobs before scheduled scans"""
+    from datetime import datetime
     return jsonify({
-        'success': True,
-        'is_running': scan_status['is_running'],
-        'progress': scan_status['progress'],
-        'message': scan_status['message']
+        'status': 'alive',
+        'timestamp': datetime.utcnow().isoformat(),
+        'message': 'Service is running'
     })
+
+
