@@ -21,6 +21,26 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+def safe_check_password_hash(password_hash, password):
+    """
+    Safely check password hash, handling environments where scrypt might be missing.
+    """
+    try:
+        return check_password_hash(password_hash, password)
+    except AttributeError as e:
+        if 'scrypt' in str(e):
+            logger.warning("Detected scrypt hash but hashlib.scrypt is missing in this environment.")
+            return False
+        raise
+
+
+def generate_safe_password_hash(password):
+    """
+    Generate password hash using pbkdf2:sha256 for maximum compatibility.
+    """
+    return generate_password_hash(password, method='pbkdf2:sha256')
+
+
 def init_auth(app):
     """
     Initialize authentication system
@@ -80,14 +100,14 @@ def load_users_from_config():
 
             if existing_user:
                 # Update password if changed
-                if not check_password_hash(existing_user.password_hash, password):
-                    existing_user.password_hash = generate_password_hash(password)
+                if not safe_check_password_hash(existing_user.password_hash, password):
+                    existing_user.password_hash = generate_safe_password_hash(password)
                     logger.info(f"Updated password for user: {username}")
             else:
                 # Create new user
                 new_user = User(
                     username=username,
-                    password_hash=generate_password_hash(password)
+                    password_hash=generate_safe_password_hash(password)
                 )
                 db.session.add(new_user)
                 logger.info(f"Created new user: {username}")
@@ -146,7 +166,7 @@ def authenticate_user(username, password):
     """
     user = User.query.filter_by(username=username).first()
 
-    if user and check_password_hash(user.password_hash, password):
+    if user and safe_check_password_hash(user.password_hash, password):
         logger.info(f"User authenticated: {username}")
         return user
 

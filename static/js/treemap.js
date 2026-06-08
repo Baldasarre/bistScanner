@@ -31,12 +31,25 @@ function createTreemap(zones, containerId) {
         .style('max-width', '100%')
         .style('height', 'auto');
 
+    // Metin taşmalarını engellemek için clip-path tanımları oluştur
+    const defs = svg.append('defs');
+    zones.forEach(zone => {
+        defs.append('clipPath')
+            .attr('id', `clip-${zone.id}`)
+            .append('rect')
+            .attr('width', 0) // Render sırasında güncellenecek
+            .attr('height', 0)
+            .attr('rx', 6)
+            .attr('ry', 6);
+    });
+
     // Prepare data for treemap
     const data = {
         name: 'zones',
         children: zones.map(zone => ({
             name: zone.ticker.replace('.IS', ''), // Remove .IS suffix
-            value: zone.score, // Use score as the value for sizing
+            // Skora 30 taban puan ekleyerek düşük puanlıların çok küçülmesini engelliyoruz
+            value: zone.score + 30, 
             zone: zone
         }))
     };
@@ -44,6 +57,7 @@ function createTreemap(zones, containerId) {
     // Create treemap layout
     const treemap = d3.treemap()
         .size([width, height])
+        .tile(d3.treemapSquarify.ratio(1.2)) // Kutuların çok ince/uzun olmasını engeller, kareye yaklaştırır
         .padding(8)        // Inner padding between cells
         .paddingOuter(10)  // Outer padding
         .round(true);
@@ -62,9 +76,16 @@ function createTreemap(zones, containerId) {
         .join('g')
         .attr('transform', d => `translate(${d.x0},${d.y0})`);
 
+    // Clip-path boyutlarını hücre boyutlarına göre ayarla
+    nodes.each(function(d) {
+        d3.select(`#clip-${d.data.zone.id} rect`)
+            .attr('width', d.x1 - d.x0)
+            .attr('height', d.y1 - d.y0);
+    });
+
     // Add rectangles
     nodes.append('rect')
-        .attr('class', 'zone-cell')
+        .attr('class', d => `zone-cell ${d.data.zone.is_flagged ? 'flagged' : ''}`)
         .attr('width', d => d.x1 - d.x0)
         .attr('height', d => d.y1 - d.y0)
         .attr('fill', d => getZoneColor(d.data.zone.score))
@@ -95,7 +116,7 @@ function createTreemap(zones, containerId) {
                 .style('font-size', '24px')
                 .style('cursor', 'pointer')
                 .style('fill', 'white')
-                .style('opacity', zone.is_flagged ? '1' : '0.6')
+                .style('opacity', zone.is_flagged ? '1' : '0.4')
                 .text('⚑')
                 .on('click', function(event) {
                     event.stopPropagation();
@@ -110,11 +131,14 @@ function createTreemap(zones, containerId) {
         const cellWidth = d.x1 - d.x0;
         const cellHeight = d.y1 - d.y0;
 
+        // Metin içeriği için ayrı bir grup oluştur ve clip-path'i sadece buna uygula
+        const textGroup = node.append('g').attr('clip-path', `url(#clip-${d.data.zone.id})`);
+
         // Only add text if cell is large enough
         if (cellWidth < 60 || cellHeight < 50) {
             // Small cell - just show ticker
             if (cellWidth >= 40 && cellHeight >= 20) {
-                node.append('text')
+                textGroup.append('text')
                     .attr('class', 'zone-label')
                     .attr('x', cellWidth / 2)
                     .attr('y', cellHeight / 2)
@@ -127,81 +151,78 @@ function createTreemap(zones, containerId) {
         }
 
         const zone = d.data.zone;
-        let yOffset = 30;
+        const canFit = (y, buffer = 8) => y < (cellHeight - buffer);
+        let yOffset = 28;
 
         // Ticker name
-        node.append('text')
-            .attr('class', 'zone-label')
-            .attr('x', cellWidth / 2)
-            .attr('y', yOffset)
-            .attr('text-anchor', 'middle')
-            .style('font-size', '25px')
-            .style('font-weight', 'bold')
-            .text(zone.ticker.replace('.IS', ''));
-
-        yOffset += 40;
+        if (canFit(yOffset)) {
+            textGroup.append('text')
+                .attr('class', 'zone-label')
+                .attr('x', cellWidth / 2)
+                .attr('y', yOffset)
+                .attr('text-anchor', 'middle')
+                .style('font-size', cellWidth < 80 ? '18px' : '24px')
+                .style('font-weight', 'bold')
+                .text(zone.ticker.replace('.IS', ''));
+            yOffset += (cellWidth < 80 ? 25 : 35);
+        }
 
         // Score (large)
-        node.append('text')
-            .attr('class', 'zone-score')
-            .attr('x', cellWidth / 2)
-            .attr('y', yOffset)
-            .attr('text-anchor', 'middle')
-            .text(`${Math.round(zone.score)} Puan`);
-
-        yOffset += 20;
+        if (canFit(yOffset)) {
+            textGroup.append('text')
+                .attr('class', 'zone-score')
+                .attr('x', cellWidth / 2)
+                .attr('y', yOffset)
+                .attr('text-anchor', 'middle')
+                .style('font-size', cellWidth < 80 ? '14px' : '20px')
+                .text(`${Math.round(zone.score)} Puan`);
+            yOffset += 20;
+        }
 
         // Score change (if available)
-        if (zone.score_change && zone.score_change !== 0) {
+        if (zone.score_change && zone.score_change !== 0 && canFit(yOffset)) {
             const changeText = zone.score_change > 0 ? `↑ +${zone.score_change.toFixed(1)}` : `↓ ${zone.score_change.toFixed(1)}`;
-            node.append('text')
+            textGroup.append('text')
                 .attr('class', `score-change ${zone.score_change > 0 ? 'positive' : 'negative'}`)
                 .attr('x', cellWidth / 2)
                 .attr('y', yOffset)
                 .attr('text-anchor', 'middle')
+                .style('font-size', '12px')
                 .text(changeText);
-
             yOffset += 18;
         }
 
         // Additional details (if space allows)
-        if (cellHeight > 100) {
-            node.append('text')
-                .attr('class', 'zone-details')
-                .attr('x', cellWidth / 2)
-                .attr('y', yOffset)
-                .attr('text-anchor', 'middle')
-                .text(`${zone.candle_count} gün`);
+        const details = [`${zone.candle_count} gün`, `% ${zone.total_diff_percent}`];
+        details.forEach(detail => {
+            if (canFit(yOffset)) {
+                textGroup.append('text')
+                    .attr('class', 'zone-details')
+                    .attr('x', cellWidth / 2)
+                    .attr('y', yOffset)
+                    .attr('text-anchor', 'middle')
+                    .text(detail);
+                yOffset += 18;
+            }
+        });
 
-            yOffset += 18;
-
-            node.append('text')
-                .attr('class', 'zone-details')
-                .attr('x', cellWidth / 2)
-                .attr('y', yOffset)
-                .attr('text-anchor', 'middle')
-                .text(`% ${zone.total_diff_percent}`);
-
-            yOffset += 20;
-
-            // Last comment (if any)
-            if (zone.last_comment) {
+        // Last comment (if any and fits)
+        if (zone.last_comment && canFit(yOffset + 5)) {
                 // Truncate comment if too long for the cell
                 const maxLength = Math.floor(cellWidth / 5.5);
                 const commentText = zone.last_comment.length > maxLength
                     ? zone.last_comment.substring(0, maxLength) + '...'
                     : zone.last_comment;
 
-                node.append('text')
+                textGroup.append('text')
                     .attr('class', 'zone-details')
                     .attr('x', cellWidth / 2)
-                    .attr('y', yOffset)
+                    .attr('y', yOffset + 5)
                     .attr('text-anchor', 'middle')
                     .style('font-size', '14px')
                     .style('font-style', 'italic')
                     .style('font-weight', '500')
                     .text(`💬 ${commentText}`);
-            }
         }
     });
 }
@@ -232,7 +253,12 @@ function getZoneColor(score) {
  */
 window.addEventListener('resize', debounce(function() {
     if (app.currentTab === 'active' && app.activeZones.length > 0) {
-        renderActiveZonesTreemap(app.activeZones);
+        // Mevcut görünüm moduna göre render et
+        if (app.activeViewMode === 'treemap') {
+            renderActiveZonesTreemap(app.activeZones);
+        } else {
+            renderActiveZonesList(app.activeZones);
+        }
     }
 }, 250));
 

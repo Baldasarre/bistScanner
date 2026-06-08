@@ -2,12 +2,14 @@
 Flask routes for the BIST scanner application
 """
 
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from database.db_manager import DatabaseManager
 from database.models import db, Zone, ZoneComment
 from web.auth import authenticate_user
 import logging
+import yfinance as yf
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -158,9 +160,14 @@ def api_scan_status():
                 'scan_log': None
             })
 
+        # Tarihi ISO 8601 formatında ve UTC (Z) belirteciyle gönder
+        log_data = scan_log.to_dict()
+        if scan_log.scan_date:
+            log_data['scan_date'] = scan_log.scan_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+
         return jsonify({
             'success': True,
-            'scan_log': scan_log.to_dict()
+            'scan_log': log_data
         })
 
     except Exception as e:
@@ -284,14 +291,106 @@ def api_toggle_flag(zone_id):
         }), 500
 
 
+@bp.route('/api/trigger-scan')
+@login_required
+def api_trigger_scan():
+    """Manuel olarak taramayı tetikleyen API endpoint'i"""
+    try:
+        # Scan is already running check
+        if hasattr(current_app, 'scan_running') and current_app.scan_running:
+            return jsonify({
+                'success': False, 
+                'error': 'Halihazırda devam eden bir tarama var. Lütfen bitmesini bekleyin.'
+            }), 429
+
+        # Scheduler nesnesine app üzerinden erişiyoruz
+        if hasattr(current_app, 'scheduler'):
+            import threading
+            
+            def run_scan_wrapper():
+                current_app.scan_running = True
+                try:
+                    current_app.scheduler.run_scan()
+                finally:
+                    current_app.scan_running = False
+
+            # Taramayı ana thread'i bloklamadan arka planda başlat
+            scan_thread = threading.Thread(target=run_scan_wrapper)
+            scan_thread.start()
+            
+            return jsonify({
+                'success': True, 
+                'message': 'Tarama arka planda baslatildi. Birkac dakika icinde sonuclar yansiyacaktir.'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Scheduler bulunamadi'}), 500
+    except Exception as e:
+        logger.error(f"Manuel tarama hatasi: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @bp.route('/api/keepalive')
 def api_keepalive():
-    """Keep the service awake - called by cron jobs before scheduled scans"""
-    from datetime import datetime
+    """Health check endpoint for the application"""
+    scheduler_active = hasattr(current_app, 'scheduler') and current_app.scheduler.running
+    
     return jsonify({
-        'status': 'alive',
-        'timestamp': datetime.utcnow().isoformat(),
-        'message': 'Service is running'
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'scheduler_running': scheduler_active,
+        'message': 'System operational'
     })
 
 
+@bp.route('/api/chart/<path:ticker>')
+@login_required
+def api_chart_data(ticker):
+    """Get chart data for a ticker"""
+    try:
+        logger.info(f"Fetching chart data for ticker: {ticker}")
+
+        # Ensure .IS extension exists
+        if not ticker.endswith('.IS'):
+            ticker = ticker + '.IS'
+            logger.info(f"Added .IS extension: {ticker}")
+
+        # Fetch last 60 days of data
+        stock = yf.Ticker(ticker)
+        hist = stock.history(period='60d', interval='1d')
+
+        logger.info(f"Fetched {len(hist)} rows for {ticker}")
+
+        if hist.empty:
+            logger.warning(f"No data available for {ticker}")
+            return jsonify({
+                'success': False,
+                'error': f'No data available for {ticker}'
+            }), 404
+
+        # Format data for frontend
+        prices = []
+        for date, row in hist.iterrows():
+            prices.append({
+                'date': date.strftime('%Y-%m-%d'),
+                'open': float(row['Open']),
+                'high': float(row['High']),
+                'low': float(row['Low']),
+                'close': float(row['Close']),
+                'volume': int(row['Volume'])
+            })
+
+        logger.info(f"Successfully formatted {len(prices)} price points for {ticker}")
+
+        return jsonify({
+            'success': True,
+            'ticker': ticker,
+            'prices': prices
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching chart data for {ticker}: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

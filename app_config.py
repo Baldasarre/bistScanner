@@ -11,15 +11,17 @@ from scanner.scheduler import ScanScheduler
 import logging
 from sqlalchemy import text
 
+logger = logging.getLogger(__name__)
 
 def run_migrations():
     """Run database migrations for PostgreSQL"""
-    logger = logging.getLogger(__name__)
 
     try:
         # Check if we're using PostgreSQL
-        if 'postgresql' not in db.engine.url.drivername:
-            logger.info("Not using PostgreSQL, skipping migrations")
+        # Using engine.name is more reliable than parsing the URL drivername
+        driver_name = db.engine.name
+        if 'postgresql' not in driver_name and 'postgres' not in driver_name:
+            logger.info(f"Database engine is {driver_name}, skipping PostgreSQL specific migrations")
             return
 
         logger.info("Running PostgreSQL migrations...")
@@ -75,14 +77,26 @@ def create_app(config=None):
     Returns:
         Flask application instance
     """
+    # Initialize logging if in production/gunicorn context
+    setup_logging()
+    
     app = Flask(__name__)
 
     # Default configuration
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
-        'DATABASE_URL',
+    # Production should use a persistent SECRET_KEY to keep user sessions alive after restarts
+    secret_key = os.environ.get('SECRET_KEY')
+    if not secret_key and not app.debug:
+        logger.warning("No SECRET_KEY set in production! Sessions will not persist.")
+    app.config['SECRET_KEY'] = secret_key or os.urandom(24).hex()
+    
+    # Compatibility fix for various PostgreSQL providers
+    database_url = os.environ.get('DATABASE_URL')
+    if database_url and database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url or \
         f"sqlite:///{os.path.join(os.path.dirname(__file__), 'data', 'bist_scanner.db')}"
-    )
+        
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # Override with custom config if provided
@@ -116,7 +130,13 @@ def create_app(config=None):
         load_users_from_config()
 
     # Initialize and start scheduler
-    if os.environ.get('FLASK_ENV') != 'development' or os.environ.get('START_SCHEDULER', 'true').lower() == 'true':
+    should_start = any([
+        os.environ.get('START_SCHEDULER', 'true').lower() == 'true',
+        not app.debug
+    ])
+
+    if should_start:
+        logger.info("Initializing APScheduler for background scans...")
         scheduler = ScanScheduler(app)
         scheduler.start()
 
@@ -131,6 +151,10 @@ def setup_logging():
     log_dir = os.path.join(os.path.dirname(__file__), 'logs')
     os.makedirs(log_dir, exist_ok=True)
 
+    # Avoid duplicate handlers if setup_logging is called multiple times
+    if logging.getLogger().hasHandlers():
+        return
+
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -139,6 +163,12 @@ def setup_logging():
             logging.StreamHandler()
         ]
     )
+
+    # Gunicorn loglarını Flask logger'a aktar (Production ortamı için)
+    if 'gunicorn' in os.environ.get('SERVER_SOFTWARE', ''):
+        gunicorn_logger = logging.getLogger('gunicorn.error')
+        logging.getLogger('flask.app').handlers = gunicorn_logger.handlers
+        logging.getLogger('flask.app').setLevel(logging.INFO)
 
     # Set yfinance logging to WARNING to reduce noise
     logging.getLogger('yfinance').setLevel(logging.WARNING)

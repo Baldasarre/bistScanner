@@ -38,6 +38,7 @@ class ScanScheduler:
             trigger='cron',
             hour=9,
             minute=0,
+            day_of_week='mon-fri',
             id='morning_scan',
             name='Morning BIST Scan (09:00)',
             replace_existing=True
@@ -49,6 +50,7 @@ class ScanScheduler:
             trigger='cron',
             hour=15,
             minute=35,
+            day_of_week='mon-fri',
             id='afternoon_scan',
             name='Afternoon BIST Scan (15:35)',
             replace_existing=True
@@ -60,13 +62,14 @@ class ScanScheduler:
             trigger='cron',
             hour=18,
             minute=30,
+            day_of_week='mon-fri',
             id='eod_scan',
             name='End of Day BIST Scan (18:30)',
             replace_existing=True
         )
 
         self.scheduler.start()
-        logger.info("Scheduler started - Daily scans at 09:00, 14:00, and 18:30")
+        logger.info("Scheduler started - Daily scans at 09:00, 15:35, and 18:30")
 
     def stop(self):
         """Stop the scheduler"""

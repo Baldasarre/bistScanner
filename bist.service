@@ -1,0 +1,17 @@
+[Unit]
+Description=BIST Scanner Flask Service
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/bist
+Environment="PATH=/home/ubuntu/bist/venv/bin"
+Environment="FLASK_ENV=production"
+Environment="START_SCHEDULER=true"
+Environment="SECRET_KEY=CokGizliBirAnahtar123!"
+ExecStart=/home/ubuntu/bist/venv/bin/gunicorn --workers 2 --preload --timeout 120 --bind 0.0.0.0:5000 "app_config:create_app()"
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

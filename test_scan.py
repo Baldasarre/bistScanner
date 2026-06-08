@@ -5,24 +5,18 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from app_config import create_app
+from app_config import create_app, setup_logging
 from scanner.data_fetcher import DataFetcher
 from scanner.accumulation_detector import AccumulationDetector
 from scanner.config import ScannerConfig
 from database.db_manager import DatabaseManager
 import logging
 import time
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
 logger = logging.getLogger(__name__)
 
 def run_test_scan():
     """Run a test scan with limited tickers"""
+    setup_logging()
     app = create_app()
 
     with app.app_context():
@@ -45,15 +39,25 @@ def run_test_scan():
             chunk_size=5
         )
 
+        if not ticker_data:
+            logger.error("❌ Veri çekilemedi. İnternet bağlantınızı veya tickers.txt dosyasını kontrol edin.")
+            return
+
         # Initialize detector
         detector = AccumulationDetector(ScannerConfig.to_dict())
 
         # Scan each ticker
         active_zones = 0
         completed_zones = 0
+        processed_count = 0
 
         for ticker, df in ticker_data.items():
-            logger.info(f"Analyzing {ticker}...")
+            if df is None or df.empty:
+                logger.warning(f"⚠️ {ticker} için veri boş, atlanıyor.")
+                continue
+                
+            processed_count += 1
+            logger.info(f"🔍 Analyzing {ticker} ({processed_count}/{len(ticker_data)})...")
             zones = detector.detect_zones(ticker, df)
 
             for zone in zones:

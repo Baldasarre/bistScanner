@@ -33,3 +33,5 @@ instance/
 .DS_Store
 Thumbs.db
 logs.txt
+
+ssh-key-2026-06-05.key
