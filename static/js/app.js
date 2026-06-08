@@ -9,6 +9,8 @@ const app = {
   movedZones: [],
   currentTab: "active",
   activeViewMode: "treemap", // treemap or list
+  scanStarted: false,
+  lastProgressTime: 0
 };
 
 // Initialize app when DOM is loaded
@@ -50,6 +52,8 @@ function initializeManualScan() {
     if (!confirm('Taramayı başlatmak istiyor musunuz?')) return;
     
     try {
+      app.scanStarted = true;
+      app.lastProgressTime = Date.now();
       const response = await fetch('/api/trigger-scan', { method: 'POST' });
       const data = await response.json();
       if (data.success) {
@@ -59,6 +63,7 @@ function initializeManualScan() {
       }
     } catch (e) {
       console.error('Scan trigger error', e);
+      app.scanStarted = false; // Trigger başarısız olursa durumu sıfırla
     }
   });
 }
@@ -74,22 +79,46 @@ function startProgressPolling() {
 
   wrapper.style.display = 'flex';
   btn.disabled = true;
+  console.log("Manuel tarama başlatıldı. İlerleme takip ediliyor...");
 
   const interval = setInterval(async () => {
     try {
-      const response = await fetch('/api/scan-progress');
+      // Cache busting: t parametresi ile tarayıcıyı kandırıyoruz
+      const response = await fetch(`/api/scan-progress?t=${Date.now()}`);
       const data = await response.json();
       const p = data.progress;
 
-      bar.style.width = `${p.percent}%`;
-      text.textContent = `${p.percent}%`;
+      // DEBUG: Tüm detayları bas
+      console.log(`[Worker PID: ${p.pid}] %${p.percent} (${p.current}/${p.total}) - Status: ${p.status}`);
 
-      if (p.status === 'idle') {
+      // KRİTİK: Eğer yeni başladıysak (ilk 10 saniye) ve idle geldiyse, worker henüz uyanmamıştır, görmezden gel.
+      const timeSinceStart = (Date.now() - app.lastProgressTime) / 1000;
+      if (app.scanStarted && (p.total === 0 || (p.status === 'idle' && p.current < p.total && timeSinceStart < 30))) {
+        console.warn(`[SYSTEM] Henüz veri gelmedi veya yanlış worker (PID: ${p.pid}). Bekleniyor...`);
+        return;
+      }
+
+      // Progress bar ve metin güncelleme
+      const percent = p.total > 0 ? p.percent : 0;
+      bar.style.width = `${percent}%`;
+      
+      if (app.scanStarted && p.total > 0 && p.current > 0) {
+        text.textContent = `%${percent} (${p.current}/${p.total})`;
+      } else if (app.scanStarted && p.total > 0 && p.current === 0) {
+        text.textContent = `Liste Hazırlandı (${p.total} Hisse), Analiz Başlıyor...`;
+      } else {
+        text.textContent = "Hazırlanıyor...";
+      }
+
+      // Sadece gerçekten bir şeyler işlendiyse ve durum idle ise bitir
+      if (p.status === 'idle' && p.total > 0 && p.current >= p.total) {
+        console.log("Tarama tamamlandı, veriler güncelleniyor.");
+        app.scanStarted = false;
         clearInterval(interval);
         setTimeout(() => {
           wrapper.style.display = 'none';
           btn.disabled = false;
-          loadActiveZones(); // Refresh data
+          loadActiveZones(); // Refresh data with cache busting inside
           loadScanStatus();
         }, 2000);
       }
@@ -202,7 +231,8 @@ async function loadScanStatus() {
  */
 async function loadActiveZones() {
   try {
-    const response = await fetch("/api/active-zones");
+    // Cache busting ekledik
+    const response = await fetch(`/api/active-zones?t=${Date.now()}`);
     const data = await response.json();
 
     if (data.success) {

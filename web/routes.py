@@ -8,9 +8,13 @@ from database.db_manager import DatabaseManager
 from database.models import db, Zone, ZoneComment
 from web.auth import authenticate_user
 import logging
+import json
 import yfinance as yf
 import numpy as np
+import pandas as pd
 import threading
+import os
+import time
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -18,15 +22,43 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 bp = Blueprint('main', __name__)
 
-def _deduplicate_zones(zones):
+def _deduplicate_zones(zones, active_only=False):
     """Helper to remove duplicate zones with same ticker and timeframe"""
+    if not zones:
+        return []
+        
+    # En yeni kaydı (en yüksek ID) en üste al.
+    # Bu sayede süzgeç her zaman en son taranan veriyi seçer.
+    zones.sort(key=lambda x: x.id if hasattr(x, 'id') else 0, reverse=True)
+
     seen = set()
     unique_zones = []
+    initial_count = len(zones)
+    
     for zone in zones:
-        identifier = (zone.ticker, zone.start_date, zone.end_date)
+        # Tarih formatı ne gelirse gelsin (string veya datetime), sadece YYYY-MM-DD kısmını al
+        # split(' ')[0] ile saat kısmını, [:10] ile de olası uzun formatları temizliyoruz
+        raw_s = str(zone.start_date).split(' ')[0]
+        raw_e = str(zone.end_date).split(' ')[0]
+        s_date = raw_s[:10]
+        e_date = raw_e[:10]
+        
+        # Ticker'ı temizle: .IS kısmını at, $ işaretini sil, büyük harfe çevir
+        clean_ticker = zone.ticker.split('.')[0].replace('$', '').strip().upper()
+        
+        # Aktif bloklarda sadece hisse koduna bak (1 hisse 1 aktif blok)
+        if active_only:
+            identifier = clean_ticker
+        else:
+            identifier = (clean_ticker, s_date, e_date)
+        
         if identifier not in seen:
             seen.add(identifier)
             unique_zones.append(zone)
+            
+    if initial_count > len(unique_zones):
+        logger.info(f"Deduplication: {initial_count} kayıttan {initial_count - len(unique_zones)} tanesi mükerrer olduğu için elendi.")
+        
     return unique_zones
 
 @bp.route('/')
@@ -71,10 +103,13 @@ def logout():
 def api_active_zones():
     """API endpoint for active zones"""
     try:
+        # SQL session verilerini tazele (stale data önleme)
+        db.session.expire_all()
+        
         zones = DatabaseManager.get_active_zones()
-
-        # Tekilleştirme işlemini yardımcı fonksiyonla yap
-        unique_zones = _deduplicate_zones(zones)
+        
+        # Aktif bloklar için sadece hisse koduna göre tekilleştir (En günceli kalır)
+        unique_zones = _deduplicate_zones(zones, active_only=True)
 
         # Add score change and last comment to each zone
         zones_data = []
@@ -107,6 +142,9 @@ def api_active_zones():
 def api_completed_zones():
     """API endpoint for completed zones (last 3 weeks)"""
     try:
+        # SQL session verilerini tazele
+        db.session.expire_all()
+        
         days = request.args.get('days', 21, type=int)
         zones = DatabaseManager.get_completed_zones(days=days)
 
@@ -143,27 +181,50 @@ def api_completed_zones():
 def api_moved_zones():
     """TSHEB - Tamamlanma sonrasi %10 hareket etmis bloklar"""
     try:
-        zones = DatabaseManager.get_completed_zones(days=30)
+        # SQL session verilerini tazele
+        db.session.expire_all()
+        
+        # Bakış penceresini 60 güne çıkaralım
+        zones = DatabaseManager.get_completed_zones(days=60)
         if not zones:
+            logger.info("TSHEB: Veritabaninda tamamlanmis/kuraldisi blok bulunamadi.")
             return jsonify({'success': True, 'zones': []})
 
         # Tekilleştirme işlemini yardımcı fonksiyonla yap
         unique_zones = _deduplicate_zones(zones)
+        logger.info(f"TSHEB: {len(unique_zones)} benzersiz blok icin fiyat kontrolu basliyor...")
 
         # Yahoo Finance hatasini onlemek icin .IS eki kontrolu
         tickers_map = {z.ticker: (z.ticker if z.ticker.endswith('.IS') else f"{z.ticker}.IS") for z in unique_zones}
         yf_tickers = list(set(tickers_map.values()))
         
-        # Hafta sonu/tatil riskine karsı 5 gunluk veri cekip sonuncuyu alıyoruz
-        data = yf.download(yf_tickers, period='5d', interval='1d', group_by='ticker', progress=False)
+        # Hafta sonu/tatil riskine karsı 7 gunluk veri cekiyoruz
+        data = yf.download(yf_tickers, period='7d', interval='1d', group_by='ticker', progress=False)
         
         moved_zones = []
         for zone in unique_zones:
             try:
                 yf_ticker = tickers_map[zone.ticker]
-                ticker_df = data[yf_ticker] if len(yf_tickers) > 1 else data
-                current_price = ticker_df['Close'].iloc[-1]
+                ticker_data = None
+
+                # yfinance yapısı tekli vs çoklu sonuçta farklıdır
+                if isinstance(data.columns, pd.MultiIndex):
+                    if yf_ticker in data.columns.levels[0]:
+                        ticker_data = data[yf_ticker]
+                else:
+                    ticker_data = data
+
+                if ticker_data is None or ticker_data.empty:
+                    continue
+
+                # Fiyat verisini güvenli bir şekilde al
+                # dropna() kullanarak son satırdaki olası NaN değerlerini atlıyoruz
+                valid_closes = ticker_data['Close'].dropna()
+                if valid_closes.empty:
+                    continue
                 
+                current_price = valid_closes.iloc[-1]
+
                 if current_price is None or np.isnan(current_price):
                     continue
 
@@ -371,7 +432,8 @@ def api_trigger_scan():
         scheduler.progress.update({
             "status": "running",
             "percent": 0,
-            "current": 0
+            "current": 0,
+            "total": 0
         })
         
         # Ana uygulama nesnesini thread içine güvenli bir şekilde aktarıyoruz
@@ -398,9 +460,39 @@ def api_trigger_scan():
 @login_required
 def api_scan_progress():
     """Get current scan progress"""
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    progress_file = os.path.join(root_dir, 'data', 'scan_progress.json')
+    
+    # Varsayılan olarak scheduler'ın bellekteki durumunu kullan (uygulama yeni başladıysa veya dosya yoksa)
+    data = current_app.scheduler.progress.copy() 
+
+    # Dosyadan okumayı dene (worker'lar arası senkronizasyon için)
+    # Atomik yazma sırasında dosya geçici olarak bozuk olabilir, bu yüzden birkaç kez dene
+    for _ in range(3): # 3 deneme hakkı ver
+        if os.path.exists(progress_file):
+            try:
+                with open(progress_file, 'r') as f:
+                    file_data = json.load(f)
+                    # Sadece dosyadaki veri daha güncelse veya tarama çalışıyorsa kullan
+                    if file_data.get('status') == 'running' or \
+                       (file_data.get('updated_at') and file_data.get('updated_at') > data.get('updated_at', '')):
+                        data = file_data
+                    break # Başarılı okuma, döngüden çık
+            except json.JSONDecodeError:
+                # Dosya bozuk veya yazılıyor olabilir, kısa bekle ve tekrar dene
+                time.sleep(0.05) 
+            except Exception as e:
+                logger.error(f"Progress dosyasini okurken hata olustu: {e}")
+                break # Diğer hatalarda tekrar deneme
+        else:
+            break # Dosya yoksa, bellekteki varsayılanı kullan
+
+    data['pid'] = os.getpid()
+    
+    logger.debug(f"[PID:{data['pid']}] Progress sorgulandi: {data['status']}")
     return jsonify({
         'success': True,
-        'progress': current_app.scheduler.progress
+        'progress': data
     })
 
 @bp.route('/api/keepalive')

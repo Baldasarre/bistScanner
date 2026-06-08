@@ -32,11 +32,12 @@ class DatabaseManager:
             Zone model instance
         """
         try:
-            # Check if zone already exists (same ticker and overlapping dates)
-            existing = Zone.query.filter_by(
-                ticker=zone_obj.ticker,
-                start_date=zone_obj.start_date.date() if isinstance(zone_obj.start_date, datetime) else zone_obj.start_date,
-                status='active'
+            # Hem aktif hem de az önce geçersiz kıldığımız (broken) bloklar arasında ara
+            s_date = zone_obj.start_date.date() if isinstance(zone_obj.start_date, datetime) else zone_obj.start_date
+            existing = Zone.query.filter(
+                Zone.ticker == zone_obj.ticker,
+                Zone.start_date == s_date,
+                Zone.status.in_(['active', 'broken'])
             ).first()
 
             if existing:
@@ -69,7 +70,8 @@ class DatabaseManager:
                     avg_rsi=convert_numpy_types(zone_obj.avg_rsi),
                     highest_body=convert_numpy_types(zone_obj.highest_body),
                     lowest_body=convert_numpy_types(zone_obj.lowest_body),
-                    status=zone_obj.status
+                    status=zone_obj.status,
+                    last_updated=datetime.utcnow()
                 )
                 db.session.add(new_zone)
                 db.session.commit()
@@ -149,7 +151,7 @@ class DatabaseManager:
         return Zone.query.filter(
             Zone.status.in_(['completed', 'broken']),
             Zone.end_date >= cutoff_date,
-            Zone.score >= 50
+            Zone.score >= 30
         ).order_by(Zone.end_date.desc()).all()
 
     @staticmethod

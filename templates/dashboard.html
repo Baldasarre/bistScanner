@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - BIST Tarayıcı{% endblock %}
+{% block title %}Orca - Dashboard{% endblock %}
 
 {% block content %}
 <div class="dashboard">
     <!-- Header -->
     <header class="dashboard-header">
         <div class="header-left">
-            <h1>BIST Akümülasyon Tarayıcı</h1>
+            <img src="{{ url_for('static', filename='img/orca.png') }}" alt="Orca Logo" class="header-logo">
+            <h1 class="header-title">Orca</h1>
         </div>
         <div class="header-right">
             <div class="scan-info" id="scan-info">
@@ -49,7 +50,7 @@
         <div id="active-tab" class="tab-pane active">
             <div class="section-header">
                 <h2>Aktif Akümülasyon Bölgeleri</h2>
-                <p class="section-description">Devam etmekte olan akümülasyon bölgeleri (skor 30+)</p>
+                <p class="section-description">En az 4 mumluk süreçte, maksimum %4 genişlikte daralan ve düşük RSI seviyelerinde güç toplayan bölgeler.</p>
                 <div class="view-toggle">
                     <button class="toggle-btn active" data-view="treemap">Treemap</button>
                     <button class="toggle-btn" data-view="list">Liste</button>
@@ -65,7 +66,7 @@
         <div id="moved-tab" class="tab-pane">
             <div class="section-header">
                 <h2>TSHEB (Tamamlanma Sonrası Hareket Etmiş Bloklar)</h2>
-                <p class="section-description">Blok orta fiyatından %10 ve üzeri uzaklaşmış hisseler (Son 30 Gün)</p>
+                <p class="section-description">Blok orta fiyatından %10 ve üzeri uzaklaşmış hisseler (Son 60 Gün)</p>
             </div>
 
             <div id="moved-zones-container" class="zones-container">

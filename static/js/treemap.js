@@ -16,7 +16,7 @@ function createTreemap(zones, containerId) {
     }
 
     // Filter out zones with score <= 39
-    const filteredZones = zones.filter(z => z.score > 39);
+    const filteredZones = zones.filter(z => z.score > 35);
 
     if (filteredZones.length === 0) {
         container.innerHTML = '<div class="loading">Gösterilecek yüksek puanlı (40+) blok bulunamadı</div>';
