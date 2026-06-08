@@ -705,6 +705,42 @@ body {
   stroke-width: 3px !important;
 }
 
+/* Progress Bar Styles */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-left: 1rem;
+}
+
+.progress-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 150px;
+}
+
+.progress-container {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent-blue);
+  transition: width 0.3s ease;
+}
+
+#scan-progress-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  min-width: 30px;
+}
+
 /* Comment count */
 .zone-comment-count {
   font-size: 0.75rem;

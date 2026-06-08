@@ -15,6 +15,14 @@ function createTreemap(zones, containerId) {
         return;
     }
 
+    // Filter out zones with score <= 39
+    const filteredZones = zones.filter(z => z.score > 39);
+
+    if (filteredZones.length === 0) {
+        container.innerHTML = '<div class="loading">Gösterilecek yüksek puanlı (40+) blok bulunamadı</div>';
+        return;
+    }
+
     // Clear container
     container.innerHTML = '';
 
@@ -33,7 +41,7 @@ function createTreemap(zones, containerId) {
 
     // Metin taşmalarını engellemek için clip-path tanımları oluştur
     const defs = svg.append('defs');
-    zones.forEach(zone => {
+    filteredZones.forEach(zone => {
         defs.append('clipPath')
             .attr('id', `clip-${zone.id}`)
             .append('rect')
@@ -46,7 +54,7 @@ function createTreemap(zones, containerId) {
     // Prepare data for treemap
     const data = {
         name: 'zones',
-        children: zones.map(zone => ({
+        children: filteredZones.map(zone => ({
             name: zone.ticker.replace('.IS', ''), // Remove .IS suffix
             // Skora 30 taban puan ekleyerek düşük puanlıların çok küçülmesini engelliyoruz
             value: zone.score + 30, 

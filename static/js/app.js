@@ -24,6 +24,7 @@ document.addEventListener("DOMContentLoaded", function () {
   loadActiveZones();
   loadCompletedZones();
   loadMovedZones();
+  initializeManualScan();
 
   // Auto-refresh every 5 minutes
   setInterval(() => {
@@ -37,6 +38,66 @@ document.addEventListener("DOMContentLoaded", function () {
     loadScanStatus();
   }, 5 * 60 * 1000);
 });
+
+/**
+ * Initialize Manual Scan functionality
+ */
+function initializeManualScan() {
+  const scanBtn = document.getElementById('manual-scan-btn');
+  if (!scanBtn) return;
+
+  scanBtn.addEventListener('click', async () => {
+    if (!confirm('Taramayı başlatmak istiyor musunuz?')) return;
+    
+    try {
+      const response = await fetch('/api/trigger-scan', { method: 'POST' });
+      const data = await response.json();
+      if (data.success) {
+        startProgressPolling();
+      } else {
+        alert(data.error);
+      }
+    } catch (e) {
+      console.error('Scan trigger error', e);
+    }
+  });
+}
+
+/**
+ * Poll for scan progress
+ */
+function startProgressPolling() {
+  const wrapper = document.getElementById('scan-progress-wrapper');
+  const bar = document.getElementById('scan-progress-bar');
+  const text = document.getElementById('scan-progress-text');
+  const btn = document.getElementById('manual-scan-btn');
+
+  wrapper.style.display = 'flex';
+  btn.disabled = true;
+
+  const interval = setInterval(async () => {
+    try {
+      const response = await fetch('/api/scan-progress');
+      const data = await response.json();
+      const p = data.progress;
+
+      bar.style.width = `${p.percent}%`;
+      text.textContent = `${p.percent}%`;
+
+      if (p.status === 'idle') {
+        clearInterval(interval);
+        setTimeout(() => {
+          wrapper.style.display = 'none';
+          btn.disabled = false;
+          loadActiveZones(); // Refresh data
+          loadScanStatus();
+        }, 2000);
+      }
+    } catch (e) {
+      console.error('Progress poll error', e);
+    }
+  }, 1000);
+}
 
 /**
  * Initialize tab switching

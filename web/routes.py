@@ -10,6 +10,7 @@ from web.auth import authenticate_user
 import logging
 import yfinance as yf
 import numpy as np
+import threading
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -353,6 +354,54 @@ def api_toggle_flag(zone_id):
             'success': False,
             'error': str(e)
         }), 500
+
+@bp.route('/api/trigger-scan', methods=['POST'])
+@login_required
+def api_trigger_scan():
+    """Start a manual scan in the background"""
+    try:
+        if not hasattr(current_app, 'scheduler'):
+            return jsonify({'success': False, 'error': 'Zamanlayıcı aktif değil.'}), 500
+            
+        scheduler = current_app.scheduler
+        if scheduler.progress["status"] == "running":
+            return jsonify({'success': False, 'error': 'Tarama zaten devam ediyor.'}), 400
+
+        # Durumu hemen güncelleyerek frontend'in progress barı başlatmasını sağlıyoruz
+        scheduler.progress.update({
+            "status": "running",
+            "percent": 0,
+            "current": 0
+        })
+        
+        # Ana uygulama nesnesini thread içine güvenli bir şekilde aktarıyoruz
+        app = current_app._get_current_object()
+        
+        def run_async(app_instance):
+            with app_instance.app_context():
+                try:
+                    app_instance.scheduler.run_scan()
+                except Exception as e:
+                    logger.error(f"Async scan crash: {e}")
+                    app_instance.scheduler.progress["status"] = "idle"
+
+        thread = threading.Thread(target=run_async, args=(app,))
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({'success': True, 'message': 'Tarama başlatıldı.'})
+    except Exception as e:
+        logger.error(f"Manual scan trigger failed: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@bp.route('/api/scan-progress')
+@login_required
+def api_scan_progress():
+    """Get current scan progress"""
+    return jsonify({
+        'success': True,
+        'progress': current_app.scheduler.progress
+    })
 
 @bp.route('/api/keepalive')
 def api_keepalive():

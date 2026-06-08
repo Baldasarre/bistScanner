@@ -29,6 +29,7 @@ class ScanScheduler:
         """
         self.scheduler = BackgroundScheduler(timezone='Europe/Istanbul')
         self.app = app
+        self.progress = {"current": 0, "total": 0, "status": "idle", "percent": 0}
 
     def start(self):
         """Start the scheduler with 3 daily scans"""
@@ -79,10 +80,14 @@ class ScanScheduler:
         logger.info("Starting scheduled scan")
         logger.info("=" * 60)
 
+        self.progress = {"current": 0, "total": 0, "status": "running", "percent": 0}
         start_time = time.time()
         errors = []
 
         try:
+            # Initialize detector
+            detector = AccumulationDetector(ScannerConfig.to_dict())
+            
             # Get tickers file path
             tickers_path = os.path.join(
                 os.path.dirname(os.path.dirname(__file__)),
@@ -91,6 +96,7 @@ class ScanScheduler:
 
             # Load tickers
             tickers = DataFetcher.load_tickers_from_file(tickers_path)
+            self.progress["total"] = len(tickers)
 
             if not tickers:
                 error_msg = "No tickers loaded from file"
@@ -103,31 +109,40 @@ class ScanScheduler:
                     errors=error_msg,
                     duration=time.time() - start_time
                 )
+                self.progress["status"] = "idle"
                 return
 
             logger.info(f"Loaded {len(tickers)} tickers")
-
-            # Fetch data for all tickers
-            logger.info("Fetching market data...")
-            ticker_data = DataFetcher.fetch_multiple_tickers(
-                tickers,
-                period=ScannerConfig.DATA_PERIOD,
-                interval=ScannerConfig.DATA_INTERVAL
-            )
-
-            # Initialize detector
-            detector = AccumulationDetector(ScannerConfig.to_dict())
 
             # Scan each ticker
             active_zones_count = 0
             completed_zones_count = 0
 
-            for ticker, df in ticker_data.items():
+            for i, ticker in enumerate(tickers):
                 try:
-                    logger.info(f"Analyzing {ticker}...")
+                    # BIST formatını (.IS) her işlem öncesi garanti et
+                    formatted_ticker = ticker if ticker.endswith('.IS') else f"{ticker}.IS"
+                    
+                    # Update progress
+                    self.progress.update({
+                        "current": i + 1,
+                        "percent": int(((i + 1) / len(tickers)) * 100)
+                    })
+                    
+                    logger.info(f"[{self.progress['percent']}%] Analyzing {formatted_ticker}...")
+
+                    # Fetch individual ticker data
+                    df = DataFetcher.fetch_ticker_data(
+                        formatted_ticker, 
+                        period=ScannerConfig.DATA_PERIOD, 
+                        interval=ScannerConfig.DATA_INTERVAL
+                    )
+                    
+                    if df is None or df.empty:
+                        continue
 
                     # Detect zones
-                    zones = detector.detect_zones(ticker, df)
+                    zones = detector.detect_zones(formatted_ticker, df)
 
                     if zones:
                         # Mark old active zones as broken if not in new results
@@ -135,7 +150,7 @@ class ScanScheduler:
 
                         if not existing_actives:
                             # No active zones found - mark existing as broken
-                            DatabaseManager.mark_zones_as_broken(ticker)
+                            DatabaseManager.mark_zones_as_broken(formatted_ticker)
 
                         # Save detected zones
                         for zone in zones:
@@ -148,7 +163,7 @@ class ScanScheduler:
                                     completed_zones_count += 1
                     else:
                         # No zones found - mark existing as broken
-                        DatabaseManager.mark_zones_as_broken(ticker)
+                        DatabaseManager.mark_zones_as_broken(formatted_ticker)
 
                 except Exception as e:
                     error_msg = f"Error analyzing {ticker}: {str(e)}"
@@ -178,6 +193,8 @@ class ScanScheduler:
             logger.info(f"Errors: {len(errors)}")
             logger.info("=" * 60)
 
+            self.progress["status"] = "idle"
+
         except Exception as e:
             error_msg = f"Fatal error during scan: {str(e)}"
             logger.error(error_msg)
@@ -190,6 +207,7 @@ class ScanScheduler:
                 errors='\n'.join(errors),
                 duration=time.time() - start_time
             )
+            self.progress["status"] = "idle"
 
 
 def run_manual_scan():
