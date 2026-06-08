@@ -369,6 +369,14 @@ body {
   border-left-color: var(--accent-red);
 }
 
+.zone-card.moved-up {
+  border-left-color: var(--accent-green);
+}
+
+.zone-card.moved-down {
+  border-left-color: var(--accent-red);
+}
+
 .zone-card-header {
   display: flex;
   justify-content: space-between;

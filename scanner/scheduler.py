@@ -32,27 +32,16 @@ class ScanScheduler:
 
     def start(self):
         """Start the scheduler with 3 daily scans"""
-        # Morning scan - 09:00 (market open)
+
+        # Afternoon scan - 14:00 (mid-day)
         self.scheduler.add_job(
             func=self.run_scan,
             trigger='cron',
-            hour=9,
+            hour=14,
             minute=0,
             day_of_week='mon-fri',
-            id='morning_scan',
-            name='Morning BIST Scan (09:00)',
-            replace_existing=True
-        )
-
-        # Afternoon scan - 14:00
-        self.scheduler.add_job(
-            func=self.run_scan,
-            trigger='cron',
-            hour=15,
-            minute=35,
-            day_of_week='mon-fri',
             id='afternoon_scan',
-            name='Afternoon BIST Scan (15:35)',
+            name='Afternoon BIST Scan (14:00)',
             replace_existing=True
         )
 
@@ -69,7 +58,7 @@ class ScanScheduler:
         )
 
         self.scheduler.start()
-        logger.info("Scheduler started - Daily scans at 09:00, 15:35, and 18:30")
+        logger.info("Scheduler started - Daily scans at 14:00 and 18:30")
 
     def stop(self):
         """Stop the scheduler"""

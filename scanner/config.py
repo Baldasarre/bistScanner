@@ -25,7 +25,7 @@ class ScannerConfig:
     MIN_SCORE_TO_SAVE = 30  # Minimum score threshold
 
     # Data fetching
-    DATA_PERIOD = "30d"  # How much historical data to fetch
+    DATA_PERIOD = "60d"  # RSI'nin dogru oturmasi icin daha uzun veri gerekir
     DATA_INTERVAL = "1d"  # Daily candles
 
     # Scan timing - default values (can be overridden by SCAN_HOUR and SCAN_MINUTE env vars in scheduler)

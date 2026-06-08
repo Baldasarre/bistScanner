@@ -152,7 +152,14 @@ function createTreemap(zones, containerId) {
 
         const zone = d.data.zone;
         const canFit = (y, buffer = 8) => y < (cellHeight - buffer);
-        let yOffset = 28;
+
+        // Dinamik font hesaplama: Kutunun boyutuna göre ölçekle
+        const calculateFontSize = (basePercent, min, max) => {
+            const size = Math.min(cellWidth, cellHeight) * basePercent;
+            return `${Math.max(min, Math.min(max, size))}px`;
+        };
+
+        let yOffset = cellHeight * 0.25; // Başlangıç ofsetini kutu boyuna oranla
 
         // Ticker name
         if (canFit(yOffset)) {
@@ -161,10 +168,10 @@ function createTreemap(zones, containerId) {
                 .attr('x', cellWidth / 2)
                 .attr('y', yOffset)
                 .attr('text-anchor', 'middle')
-                .style('font-size', cellWidth < 80 ? '18px' : '24px')
+                .style('font-size', calculateFontSize(0.2, 12, 28))
                 .style('font-weight', 'bold')
                 .text(zone.ticker.replace('.IS', ''));
-            yOffset += (cellWidth < 80 ? 25 : 35);
+            yOffset += (cellHeight * 0.2);
         }
 
         // Score (large)
@@ -174,9 +181,9 @@ function createTreemap(zones, containerId) {
                 .attr('x', cellWidth / 2)
                 .attr('y', yOffset)
                 .attr('text-anchor', 'middle')
-                .style('font-size', cellWidth < 80 ? '14px' : '20px')
+                .style('font-size', calculateFontSize(0.15, 10, 22))
                 .text(`${Math.round(zone.score)} Puan`);
-            yOffset += 20;
+            yOffset += (cellHeight * 0.15);
         }
 
         // Score change (if available)
@@ -187,9 +194,9 @@ function createTreemap(zones, containerId) {
                 .attr('x', cellWidth / 2)
                 .attr('y', yOffset)
                 .attr('text-anchor', 'middle')
-                .style('font-size', '12px')
+                .style('font-size', calculateFontSize(0.1, 9, 14))
                 .text(changeText);
-            yOffset += 18;
+            yOffset += (cellHeight * 0.12);
         }
 
         // Additional details (if space allows)
@@ -201,13 +208,14 @@ function createTreemap(zones, containerId) {
                     .attr('x', cellWidth / 2)
                     .attr('y', yOffset)
                     .attr('text-anchor', 'middle')
+                    .style('font-size', calculateFontSize(0.08, 8, 12))
                     .text(detail);
-                yOffset += 18;
+                yOffset += (cellHeight * 0.1);
             }
         });
 
         // Last comment (if any and fits)
-        if (zone.last_comment && canFit(yOffset + 5)) {
+        if (zone.last_comment && canFit(yOffset + (cellHeight * 0.05))) {
                 // Truncate comment if too long for the cell
                 const maxLength = Math.floor(cellWidth / 5.5);
                 const commentText = zone.last_comment.length > maxLength
@@ -217,9 +225,9 @@ function createTreemap(zones, containerId) {
                 textGroup.append('text')
                     .attr('class', 'zone-details')
                     .attr('x', cellWidth / 2)
-                    .attr('y', yOffset + 5)
+                    .attr('y', yOffset + (cellHeight * 0.05))
                     .attr('text-anchor', 'middle')
-                    .style('font-size', '14px')
+                    .style('font-size', calculateFontSize(0.09, 9, 13))
                     .style('font-style', 'italic')
                     .style('font-weight', '500')
                     .text(`💬 ${commentText}`);

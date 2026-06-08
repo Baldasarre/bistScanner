@@ -12,7 +12,7 @@
         <div class="header-right">
             <div class="scan-info" id="scan-info">
                 <span class="scan-date">Tarama bekleniyor...</span>
-                <div class="scan-schedule">Günlük taramalar: 09:00, 14:00, 18:30</div>
+                <div class="scan-schedule">Günlük taramalar: 14:00, 18:30</div>
             </div>
             <div class="user-menu">
                 <span class="username">{{ current_user.username }}</span>
@@ -28,6 +28,9 @@
         </button>
         <button class="tab-button" data-tab="completed">
             Tamamlanan Bloklar <span id="completed-count" class="badge">0</span>
+        </button>
+        <button class="tab-button" data-tab="moved">
+            TSHEB <span id="moved-count" class="badge">0</span>
         </button>
     </div>
 
@@ -46,6 +49,18 @@
 
             <div id="active-zones-container" class="zones-container">
                 <div class="loading">Yükleniyor...</div>
+            </div>
+        </div>
+
+        <!-- Moved Zones Tab (TSHEB) -->
+        <div id="moved-tab" class="tab-pane">
+            <div class="section-header">
+                <h2>TSHEB (Tamamlanma Sonrası Hareket Etmiş Bloklar)</h2>
+                <p class="section-description">Blok orta fiyatından %10 ve üzeri uzaklaşmış hisseler (Son 30 Gün)</p>
+            </div>
+
+            <div id="moved-zones-container" class="zones-container">
+                <div class="loading">Veriler hesaplanıyor...</div>
             </div>
         </div>
 

@@ -6,6 +6,7 @@
 const app = {
   activeZones: [],
   completedZones: [],
+  movedZones: [],
   currentTab: "active",
   activeViewMode: "treemap", // treemap or list
 };
@@ -22,52 +23,20 @@ document.addEventListener("DOMContentLoaded", function () {
   loadScanStatus();
   loadActiveZones();
   loadCompletedZones();
-  initializeScanTrigger();
+  loadMovedZones();
 
   // Auto-refresh every 5 minutes
   setInterval(() => {
     if (app.currentTab === "active") {
       loadActiveZones();
+    } else if (app.currentTab === "moved") {
+      loadMovedZones();
     } else {
       loadCompletedZones();
     }
     loadScanStatus();
   }, 5 * 60 * 1000);
 });
-
-/**
- * Initialize manual scan trigger button
- */
-function initializeScanTrigger() {
-  const triggerBtn = document.getElementById("trigger-scan-btn");
-  if (!triggerBtn) return;
-
-  triggerBtn.addEventListener("click", async function () {
-    if (!confirm("Taramayı şimdi başlatmak istediğinize emin misiniz? Bu işlem birkaç dakika sürebilir.")) {
-      return;
-    }
-
-    triggerBtn.disabled = true;
-    triggerBtn.textContent = "Tarama Başlatıldı...";
-
-    try {
-      const response = await fetch("/api/trigger-scan");
-      const data = await response.json();
-
-      if (data.success) {
-        alert(data.message);
-      } else {
-        alert("Hata: " + data.error);
-      }
-    } catch (error) {
-      console.error("Scan trigger error:", error);
-      alert("Tarama başlatılırken teknik bir hata oluştu.");
-    } finally {
-      triggerBtn.disabled = false;
-      triggerBtn.textContent = "Manuel Tarama Başlat";
-    }
-  });
-}
 
 /**
  * Initialize tab switching
@@ -196,6 +165,62 @@ async function loadActiveZones() {
       "Aktif bloklar yüklenirken hata oluştu"
     );
   }
+}
+
+/**
+ * Load TSHEB (Moved) zones
+ */
+async function loadMovedZones() {
+  try {
+    const response = await fetch("/api/moved-zones");
+    const data = await response.json();
+    if (data.success) {
+      app.movedZones = data.zones;
+      const countEl = document.getElementById("moved-count");
+      if (countEl) countEl.textContent = app.movedZones.length;
+      renderMovedZonesList(app.movedZones);
+    }
+  } catch (error) {
+    console.error("Error loading moved zones:", error);
+  }
+}
+
+/**
+ * Render moved zones list
+ */
+function renderMovedZonesList(zones) {
+  const container = document.getElementById("moved-zones-container");
+  if (!container) return;
+  if (zones.length === 0) {
+    container.innerHTML = '<div class="loading">Kriterlere uygun hareket bulanamadi</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="zones-list">
+      ${zones.map(zone => {
+        const ticker = zone.ticker.replace(".IS", "");
+        const cardClass = zone.move_percent > 0 ? "moved-up" : "moved-down";
+        return `
+          <div class="zone-card ${cardClass}" onclick="showZoneDetail(${zone.id})">
+            <div class="zone-card-header">
+              <span class="zone-ticker">${ticker}</span>
+              <span class="zone-status" style="background: ${zone.move_percent > 0 ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'}; color: ${zone.move_percent > 0 ? '#10b981' : '#ef4444'};">
+                ${zone.move_percent > 0 ? '↑' : '↓'} %${Math.abs(zone.move_percent)}
+              </span>
+            </div>
+            <div class="zone-card-body">
+              <div class="zone-stat"><strong>Baz:</strong> ${((zone.highest_body + zone.lowest_body)/2).toFixed(2)}</div>
+              <div class="zone-stat"><strong>Cari:</strong> ${zone.current_price}</div>
+              <div class="zone-stat"><strong>Puan:</strong> ${zone.score}</div>
+              <div class="zone-stat"><strong>Mum:</strong> ${zone.candle_count}</div>
+              <div class="zone-stat"><strong>Bitis:</strong> ${formatDate(zone.end_date)}</div>
+            </div>
+            ${zone.last_comment ? `<div class="zone-last-comment-completed">💬 ${zone.last_comment}</div>` : ''}
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 /**

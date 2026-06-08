@@ -9,6 +9,7 @@ from database.models import db, Zone, ZoneComment
 from web.auth import authenticate_user
 import logging
 import yfinance as yf
+import numpy as np
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,16 @@ logger = logging.getLogger(__name__)
 # Create blueprint
 bp = Blueprint('main', __name__)
 
+def _deduplicate_zones(zones):
+    """Helper to remove duplicate zones with same ticker and timeframe"""
+    seen = set()
+    unique_zones = []
+    for zone in zones:
+        identifier = (zone.ticker, zone.start_date, zone.end_date)
+        if identifier not in seen:
+            seen.add(identifier)
+            unique_zones.append(zone)
+    return unique_zones
 
 @bp.route('/')
 @login_required
@@ -61,9 +72,12 @@ def api_active_zones():
     try:
         zones = DatabaseManager.get_active_zones()
 
+        # Tekilleştirme işlemini yardımcı fonksiyonla yap
+        unique_zones = _deduplicate_zones(zones)
+
         # Add score change and last comment to each zone
         zones_data = []
-        for zone in zones:
+        for zone in unique_zones:
             zone_dict = zone.to_dict()
             zone_dict['score_change'] = DatabaseManager.get_zone_score_change(zone.id)
             # Add last comment preview
@@ -95,9 +109,12 @@ def api_completed_zones():
         days = request.args.get('days', 21, type=int)
         zones = DatabaseManager.get_completed_zones(days=days)
 
+        # Tekilleştirme işlemini yardımcı fonksiyonla yap
+        unique_zones = _deduplicate_zones(zones)
+
         # Add last comment to each zone
         zones_data = []
-        for zone in zones:
+        for zone in unique_zones:
             zone_dict = zone.to_dict()
             # Add last comment preview
             if zone.comments:
@@ -118,6 +135,53 @@ def api_completed_zones():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@bp.route('/api/moved-zones')
+@login_required
+def api_moved_zones():
+    """TSHEB - Tamamlanma sonrasi %10 hareket etmis bloklar"""
+    try:
+        zones = DatabaseManager.get_completed_zones(days=30)
+        if not zones:
+            return jsonify({'success': True, 'zones': []})
+
+        # Tekilleştirme işlemini yardımcı fonksiyonla yap
+        unique_zones = _deduplicate_zones(zones)
+
+        # Yahoo Finance hatasini onlemek icin .IS eki kontrolu
+        tickers_map = {z.ticker: (z.ticker if z.ticker.endswith('.IS') else f"{z.ticker}.IS") for z in unique_zones}
+        yf_tickers = list(set(tickers_map.values()))
+        
+        # Hafta sonu/tatil riskine karsı 5 gunluk veri cekip sonuncuyu alıyoruz
+        data = yf.download(yf_tickers, period='5d', interval='1d', group_by='ticker', progress=False)
+        
+        moved_zones = []
+        for zone in unique_zones:
+            try:
+                yf_ticker = tickers_map[zone.ticker]
+                ticker_df = data[yf_ticker] if len(yf_tickers) > 1 else data
+                current_price = ticker_df['Close'].iloc[-1]
+                
+                if current_price is None or np.isnan(current_price):
+                    continue
+
+                base_price = (zone.highest_body + zone.lowest_body) / 2
+                diff_pct = (current_price - base_price) / base_price
+                
+                if abs(diff_pct) >= 0.10:
+                    zone_dict = zone.to_dict()
+                    zone_dict['current_price'] = round(float(current_price), 2)
+                    zone_dict['move_percent'] = round(float(diff_pct * 100), 1)
+                    moved_zones.append(zone_dict)
+            except Exception:
+                continue
+
+        moved_zones.sort(key=lambda x: abs(x['move_percent']), reverse=True)
+        return jsonify({'success': True, 'zones': moved_zones})
+    except Exception as e:
+        logger.error(f"TSHEB hatasi: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @bp.route('/api/zone/<int:zone_id>')
@@ -289,44 +353,6 @@ def api_toggle_flag(zone_id):
             'success': False,
             'error': str(e)
         }), 500
-
-
-@bp.route('/api/trigger-scan')
-@login_required
-def api_trigger_scan():
-    """Manuel olarak taramayı tetikleyen API endpoint'i"""
-    try:
-        # Scan is already running check
-        if hasattr(current_app, 'scan_running') and current_app.scan_running:
-            return jsonify({
-                'success': False, 
-                'error': 'Halihazırda devam eden bir tarama var. Lütfen bitmesini bekleyin.'
-            }), 429
-
-        # Scheduler nesnesine app üzerinden erişiyoruz
-        if hasattr(current_app, 'scheduler'):
-            import threading
-            
-            def run_scan_wrapper():
-                current_app.scan_running = True
-                try:
-                    current_app.scheduler.run_scan()
-                finally:
-                    current_app.scan_running = False
-
-            # Taramayı ana thread'i bloklamadan arka planda başlat
-            scan_thread = threading.Thread(target=run_scan_wrapper)
-            scan_thread.start()
-            
-            return jsonify({
-                'success': True, 
-                'message': 'Tarama arka planda baslatildi. Birkac dakika icinde sonuclar yansiyacaktir.'
-            })
-        else:
-            return jsonify({'success': False, 'error': 'Scheduler bulunamadi'}), 500
-    except Exception as e:
-        logger.error(f"Manuel tarama hatasi: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 @bp.route('/api/keepalive')
 def api_keepalive():
